@@ -27,5 +27,7 @@
 - Big copies (> free space, e.g. >20GB) no longer blocked: warn + attempt like MEGA app; clear msg on MEGA over-quota (-17)
 - /search across all accounts with open/options buttons
 
+- /prefix <text> (off to clear): saved folder links auto-renamed to prefix + original name before share link
+
 ## Backlog
 - P2: storage alerts, webhook mode for multi-instance deploy

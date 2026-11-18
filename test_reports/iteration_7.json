@@ -1,0 +1,19 @@
+{
+  "summary": "Backend-only test of the /prefix feature with MEGA and Telegram mocked and throwaway TEST_ DBs. Added tests/test_prefix.py with 14 tests. (1) with_prefix: 'DD FREE DISH'+'abcd' gives 'DD FREE DISH abcd'; no space is added after ' -_|.]):'; a name that already has the prefix is not prefixed again. (2) /prefix with no args shows the current value ('koi nahi') and the usage. '/prefix DD FREE DISH' stores bot_state.prefix and replies 'abcd ➥ DD FREE DISH abcd' plus CREDIT. 'OFF' clears it (case-insensitive). 51 chars is rejected and 50 is accepted. A non-owner is refused and nothing is stored. (3) save_link with a folder link: rename(NEWF, 'DD FREE DISH abcd') runs after import_folder_link and before share_link. The reply has '🏷 Naya naam: DD FREE DISH abcd (purana: abcd)', the new name in the title, the share link and the r/o keyboard. If rename raises, the reply still says SAVE HO GAYA with 'Prefix nahi laga' and the old name. (4) File links are not renamed. Folders are not renamed when no prefix is set, or when import returns no handle. (5) /status shows the Prefix line. HELP has /prefix and is 1024 chars or less. (6) The real ms.rename calls m.rename((handle, node), name). 81/81 pass (with xdist; also 14/14 with -n 0). ruff F is clean. The real test_database is unchanged (account dac6ff85 only, no prefix key) and no TEST_ DBs are left.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_prefix.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "with_prefix matches case-sensitively: prefix 'DD' with name 'dd abcd' gives 'DD dd abcd'. Minor.",
+    "If the name already has the prefix, ms.rename is still called with the same name. That is one wasted API call. Skip it when new_name == li['name'].",
+    "ms.rename calls get_files() (the full tree) right after a big import, which is slow on large accounts but correct.",
+    "Prefix length is not checked against Telegram's 64-byte callback limit. This is fine because callbacks use handles, not names."
+  ],
+  "updated_files": ["/app/backend/tests/test_prefix.py"],
+  "success_rate": {"backend": "100% (81/81)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "None; throwaway TEST_bot_handlers_<uuid> DBs auto-dropped.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/. test_prefix.py reuses patch_run/raiser from test_bigsave_search.py and helpers from test_bot_handlers.py. Never start a second polling instance. Real DB has account dac6ff85 - do not touch."
+}
