@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+import bot  # noqa: E402
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -24,6 +25,11 @@ db = client[os.environ['DB_NAME']]
 
 # One entry per collection: every field a route filters, sorts or dedupes on. Add the index in the same edit as the query.
 INDEXES: dict[str, list[IndexModel]] = {
+    "mega_accounts": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("email", ASCENDING)], name="email", unique=True),
+        IndexModel([("created_at", ASCENDING)], name="created_at"),
+    ],
     "status_checks": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("timestamp", DESCENDING)], name="timestamp_desc"),
@@ -86,6 +92,38 @@ async def get_status_checks(limit: int = Query(20, ge=1, le=100)):
     
     return status_checks
 
+class AccountOut(BaseModel):
+    id: str
+    label: str
+    email: str
+    used: int = 0
+    total: int = 0
+    save_folder_name: str | None = None
+
+
+def mask_email(e: str) -> str:
+    name, _, domain = e.partition("@")
+    return f"{name[:2]}***@{domain}"
+
+
+@api_router.get("/bot/status")
+async def bot_status():
+    state = await db.bot_state.find_one({"_id": "owner"}) or {}
+    return {
+        "running": bot.info["running"],
+        "username": bot.info["username"],
+        "error": bot.info["error"],
+        "owner_set": bool(os.environ.get("TELEGRAM_OWNER_ID")),
+        "auto_switch": state.get("auto_switch", False),
+        "active_account_id": state.get("active_account_id"),
+    }
+
+
+@api_router.get("/accounts", response_model=List[AccountOut])
+async def list_accounts():
+    docs = await db.mega_accounts.find({}, {"_id": 0, "password_enc": 0}).sort("created_at", 1).to_list(100)
+    return [AccountOut(**{**d, "email": mask_email(d["email"])}) for d in docs]
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -107,9 +145,11 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def start_index_build():
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
+    await bot.start_bot(db)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    await bot.stop_bot()
     app.state.index_task.cancel()  # stop a build still running before its client closes
     with suppress(asyncio.CancelledError):
         await app.state.index_task

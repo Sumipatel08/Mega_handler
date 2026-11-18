@@ -1,57 +1,115 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
 import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { Bot, HardDrive, RefreshCw, Shuffle, Terminal } from "lucide-react";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+const COMMANDS = [
+  ["/addaccount email password", "Apna MEGA account jodo (password wala message bot khud delete karega)"],
+  ["/accounts", "Saare accounts, khali jagah, switch ya hatao"],
+  ["/folders", "Buttons se folder kholo, rename karo, save folder chuno"],
+  ["/newfolder naam", "Selected folder mein naya folder"],
+  ["/auto", "Link sabse zyada khali jagah wale account mein jaye"],
+  ["MEGA link bhejo", "File seedha aapke cloud mein save"],
+];
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+const gb = (n) => `${(n / 1073741824).toFixed(2)} GB`;
 
+const StatusCard = ({ status }) => {
+  const ok = status?.running;
   return (
-    // The marker attribute below lets the platform probe detect the stock splash — remove it with this page
-    <div data-emergent-splash>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
+    <div data-testid="bot-status-card" className="panel">
+      <div className="flex items-center gap-3">
+        <span className={`dot ${ok ? "dot-on" : "dot-off"}`} />
+        <span data-testid="bot-status-text" className="text-sm uppercase tracking-[0.2em]">
+          {ok ? "Bot chal raha hai" : "Bot band hai"}
+        </span>
+      </div>
+      {ok ? (
+        <a data-testid="bot-telegram-link" href={`https://t.me/${status.username}`} target="_blank" rel="noreferrer" className="handle">
+          @{status.username}
         </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
+      ) : (
+        <p data-testid="bot-status-error" className="mt-4 text-sm text-[var(--muted)]">
+          {status?.error || "Load ho raha hai..."}
+        </p>
+      )}
+      <div className="mt-6 flex flex-wrap gap-3 text-xs">
+        <span data-testid="owner-lock-badge" className="chip">{status?.owner_set ? "Sirf aap (owner lock ON)" : "Owner ID set nahi"}</span>
+        <span data-testid="auto-switch-badge" className="chip"><Shuffle size={12} /> Auto switch {status?.auto_switch ? "ON" : "OFF"}</span>
+      </div>
     </div>
   );
 };
 
-function App() {
+const AccountRow = ({ a, active }) => {
+  const pct = a.total ? Math.min(100, (a.used / a.total) * 100) : 0;
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <li data-testid={`account-row-${a.id}`} className="acc">
+      <div className="flex justify-between gap-4">
+        <div>
+          <p className="font-semibold">{a.label} {active && <span className="chip ml-2">active</span>}</p>
+          <p className="text-xs text-[var(--muted)]">{a.email} · {a.save_folder_name || "Cloud Drive"}</p>
+        </div>
+        <p data-testid={`account-free-${a.id}`} className="text-sm whitespace-nowrap">{gb(a.total - a.used)} khali</p>
+      </div>
+      <div className="bar"><div style={{ width: `${pct}%` }} /></div>
+    </li>
+  );
+};
+
+export default function App() {
+  const [status, setStatus] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+
+  const load = async () => {
+    const [s, a] = await Promise.all([axios.get(`${API}/bot/status`), axios.get(`${API}/accounts`)]);
+    setStatus(s.data);
+    setAccounts(a.data);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <main className="shell">
+      <header className="rise">
+        <p className="eyebrow"><Bot size={14} /> Telegram x MEGA</p>
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl">MEGA Manager Bot</h1>
+        <p className="mt-4 max-w-xl text-base text-[var(--muted)]">
+          Kai MEGA accounts, ek bot. Folder banao, links cloud mein save karo, naam badlo, sab Telegram se.
+        </p>
+      </header>
+
+      <section className="grid gap-6 lg:grid-cols-[1fr_1.4fr] mt-14">
+        <div className="space-y-6 rise" style={{ animationDelay: "120ms" }}>
+          <StatusCard status={status} />
+          <div className="panel">
+            <p className="eyebrow"><Terminal size={14} /> Commands</p>
+            <ul className="space-y-4 mt-4">
+              {COMMANDS.map(([c, d]) => (
+                <li key={c}><code className="cmd">{c}</code><p className="text-sm text-[var(--muted)] mt-1">{d}</p></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="panel rise" style={{ animationDelay: "220ms" }}>
+          <div className="flex items-center justify-between">
+            <p className="eyebrow"><HardDrive size={14} /> Jude hue accounts ({accounts.length})</p>
+            <button data-testid="refresh-accounts-button" onClick={load} className="iconbtn" aria-label="Refresh"><RefreshCw size={16} /></button>
+          </div>
+          {accounts.length === 0 ? (
+            <p data-testid="no-accounts-message" className="mt-6 text-sm text-[var(--muted)]">
+              Abhi koi account nahi. Bot ko /addaccount email password bhejo.
+            </p>
+          ) : (
+            <ul data-testid="accounts-list" className="mt-6 space-y-4">
+              {accounts.map((a) => <AccountRow key={a.id} a={a} active={a.id === status?.active_account_id} />)}
+            </ul>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }
-
-export default App;
