@@ -16,6 +16,7 @@ def em(t):
     return escape_markdown(str(t), version=1)
 
 log = logging.getLogger("bot")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 db = None
 application: Application | None = None
 info = {"running": False, "username": None, "error": None}
@@ -203,6 +204,7 @@ async def cmd_folders(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not acc:
         await update.message.reply_text("Pehle /addaccount se account jodo.")
         return
+    await set_state(moving=None, pending=None)
     msg = await update.message.reply_text("Folders load ho rahe hain...")
     try:
         text, kb = await folder_view(acc, acc.get("save_folder"))
@@ -374,8 +376,9 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(f"'{node['name']}' delete karein? Ye Rubbish Bin mein chala jayega.", reply_markup=kb)
         elif action == "dx":
             node = await ms.run(acc, ms.node_info, arg)
+            hit = acc.get("save_folder") and await ms.run(acc, ms.is_under, acc["save_folder"], arg)
             await ms.run(acc, ms.delete_node, arg)
-            if acc.get("save_folder") == arg:
+            if hit:
                 await db.mega_accounts.update_one({"id": acc["id"]}, {"$set": {"save_folder": None, "save_folder_name": "Cloud Drive"}})
             text, kb = await folder_view(await get_account(acc["id"]), node["parent"])
             await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)

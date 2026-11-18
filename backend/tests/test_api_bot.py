@@ -1,7 +1,6 @@
 # API tests: /api/bot/status and /api/accounts (masking, no password_enc)
 import os
 import uuid
-import pytest
 import requests
 from pathlib import Path
 from dotenv import load_dotenv

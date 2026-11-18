@@ -1,0 +1,30 @@
+{
+  "summary": "Backend-only testing of folder-link saving and the file actions (share/rename/move/delete) with all MEGA calls mocked. No second polling instance was started. mega_service was tested with a realistic encrypted public folder built from real mega.crypto helpers: random folder key, master key, 4-word folder keys and 8-word file keys. That covers name decryption, size and counts, the request params, the 'p' payload (root has no 'p', children keep 'p', keys re-wrapped with the master key and still decrypt the attributes) and the error paths. Also covered: move_node rejecting a move into itself or a descendant, share_link old-to-new URL conversion, and delete going to Rubbish Bin (type 4). In bot.py: the save_link folder and file branches including the old #F! format, folder_view listing files and move mode (only for the matching account), and on_button i/sh/d/dx/m/mv/mc/r/n plus an unknown account. Three iteration-1 tests were out of date after the intended design changes (callback format, folder links now supported, pick_account_for() taking no argument) and were updated. 27/27 pass with xdist and serially. Throwaway DBs were dropped; none left behind.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "bot.on_button dx", "issue": "save_folder is reset only when the deleted handle equals save_folder exactly. Deleting an ancestor folder of the save folder leaves save_folder pointing at a node now in the Rubbish Bin, so later links are silently imported into the Rubbish Bin."},
+      {"endpoint": "bot moving state", "issue": "bot_state.moving is cleared only by mv/mc. If the user abandons a move, every later /folders view for that account stays in move mode (no file, save or new-folder buttons) until they press Cancel."},
+      {"endpoint": "mega_service._public_folder_nodes", "issue": "Uses m._http.post directly, so it skips the 402 hashcash handling and the -3 retry in _api_request, and r.json() raises on an empty body. save_link also downloads the folder listing twice (once in folder_link_info, once in import_folder_link)."},
+      {"endpoint": "logging", "issue": "The httpx INFO logs in backend.err.log print the full Telegram bot token in the URL (api.telegram.org/bot<TOKEN>/getUpdates). Set logging.getLogger('httpx').setLevel(logging.WARNING)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_folder_links_file_actions.py", "/app/backend/tests/test_bot_handlers.py", "/app/backend/tests/test_api_bot.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "In dx: also reset save_folder when the deleted node is an ancestor of save_folder (walk the parents via get_files)",
+    "Clear bot_state.moving in cmd_folders, or when the user starts a new action, so move mode does not get stuck",
+    "Silence the httpx INFO logger so the bot token is not written to logs",
+    "Optional: send the public-folder 'f' request through the same hashcash/retry path; cache the folder nodes between info and import"
+  ],
+  "critical_code_review_comments": [
+    "The import_folder_link payload matches the webclient format (a:p, t, n[{h,t,a,k,p}], v:3, sm:1), but it was checked only against mocks. No real MEGA account was available, so the import is unverified live.",
+    "Callback data length is fine (about 20 bytes, under Telegram's 64-byte limit)."
+  ],
+  "updated_files": ["/app/backend/tests/test_bot_handlers.py", "/app/backend/tests/test_folder_links_file_actions.py"],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "skipped"},
+  "seed_data_creation": "None. Handler tests use throwaway DBs named TEST_bot_handlers_<uuid>, dropped afterwards; verified that no TEST_ DBs remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/ (pytest.ini adds xdist). FakeMega in test_bot_handlers.py now supports list_folder with files, node_info, folder_link_info, import_folder_link, share_link, delete_node and move_node. build_folder() in test_folder_links_file_actions.py builds a real encrypted public folder. Callbacks use the <action>:<acc_id>:<handle> format. Never start a second polling instance."
+}

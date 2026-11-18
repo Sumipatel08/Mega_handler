@@ -17,6 +17,7 @@
 - /addaccount (deletes password message), /accounts (free space, use, remove), /folders inline browser (open, up, rename, select save folder, new folder), /newfolder, /auto, /status, /myid
 - File link save to selected folder; auto switch to account with most free space; space check before save
 
+- Folder link import (new + old formats), files listed in browser, item menu: share link, rename, move (move mode), delete to Rubbish Bin
+
 ## Backlog
-- P1: MEGA folder links (/folder/) import
-- P2: Delete/move files via buttons, search, webhook mode for multi-instance deploy
+- P2: search, storage alerts, webhook mode for multi-instance deploy

@@ -27,6 +27,9 @@ FOLDERS = {
 }
 
 
+FILES = {"R": [("F0", "root.txt")], "A1": [("F1", "a.mp4"), ("F2", "b.pdf")]}
+
+
 class FakeMega:
     def __init__(self):
         self.storage = {}  # acc_id -> (used,total)
@@ -42,7 +45,31 @@ class FakeMega:
             h = args[0] if args and args[0] in FOLDERS else "R"
             f = FOLDERS[h]
             return {"handle": h, "name": f["name"], "is_root": h == "R", "parent": f["parent"],
-                    "folders": f["subs"], "file_count": 2}
+                    "folders": f["subs"], "files": FILES.get(h, []), "file_count": len(FILES.get(h, []))}
+        if name == "node_info":
+            h = args[0]
+            if h in FOLDERS:
+                return {"handle": h, "name": FOLDERS[h]["name"], "is_file": False, "size": 0, "parent": FOLDERS[h]["parent"]}
+            for p, fl in FILES.items():
+                for fh, fn in fl:
+                    if fh == h:
+                        return {"handle": h, "name": fn, "is_file": True, "size": 5 * GB, "parent": p}
+            raise KeyError(h)
+        if name == "folder_link_info":
+            return {"name": "TEST_Shared", "size": 3 * GB, "files": 4, "folders": 2}
+        if name == "import_folder_link":
+            return None
+        if name in ("share_link",):
+            return "https://mega.nz/file/F1#KEY"
+        if name == "is_under":
+            node, anc = args
+            while node in FOLDERS:
+                if node == anc:
+                    return True
+                node = FOLDERS[node]["parent"]
+            return False
+        if name in ("delete_node", "move_node"):
+            return None
         if name == "mkdir":
             return "NEWH"
         if name == "rename":
@@ -219,32 +246,34 @@ class TestFolders:
             await bot.cmd_folders(upd, ctx)
             kb = sent.edit_text.call_args.kwargs["reply_markup"]
             data = kb_data(kb)
-            assert "o:A1" in data and "s:R" in data and "n:R" in data and "accs" in data
-            assert not any(d.startswith("r:") for d in data)  # no rename for root
+            A = a1["id"]
+            assert f"o:{A}:A1" in data and f"s:{A}:R" in data and f"n:{A}:R" in data and "accs" in data
+            assert f"i:{A}:F0" in data and f"i:{A}:R" not in data  # root has no options
             # open A1
-            u, c = cb_update("o:A1")
+            u, c = cb_update(f"o:{A}:A1")
             await bot.on_button(u, c)
             d2 = kb_data(u.callback_query.edit_message_text.call_args.kwargs["reply_markup"])
-            assert "o:B1" in d2 and "o:R" in d2 and "r:A1" in d2 and "s:A1" in d2 and "n:A1" in d2
+            for x in [f"o:{A}:B1", f"o:{A}:R", f"i:{A}:A1", f"s:{A}:A1", f"n:{A}:A1", f"i:{A}:F1", f"i:{A}:F2"]:
+                assert x in d2
             # select A1
-            u, c = cb_update("s:A1")
+            u, c = cb_update(f"s:{A}:A1")
             await bot.on_button(u, c)
             acc = await bot.get_account(a1["id"])
             assert acc["save_folder"] == "A1" and acc["save_folder_name"] == "Alpha"
             assert "Alpha" in u.callback_query.message.reply_text.call_args[0][0]
             assert "(yahi)" in u.callback_query.edit_message_text.call_args[0][0]
             # mkdir pending
-            u, c = cb_update("n:A1")
+            u, c = cb_update(f"n:{A}:A1")
             await bot.on_button(u, c)
             st = await bot.get_state()
-            assert st["pending"] == {"type": "mkdir", "h": "A1", "acc": a1["id"]}
+            assert st["pending"] == {"type": "mkdir", "h": "A1", "acc": a1["id"], "back": "A1"}
             up, cx, _ = msg_update(text="TEST_NewDir")
             await bot.on_text(up, cx)
             assert (a1["id"], "mkdir", ("TEST_NewDir", "A1")) in fake.calls
             assert "ban gaya" in up.message.reply_text.call_args_list[0][0][0]
             assert (await bot.get_state())["pending"] is None
             # rename pending (save folder renamed -> save_folder_name updated)
-            u, c = cb_update("r:A1")
+            u, c = cb_update(f"r:{A}:A1")
             await bot.on_button(u, c)
             assert (await bot.get_state())["pending"]["type"] == "rename"
             up, cx, _ = msg_update(text="TEST_Renamed")
@@ -275,13 +304,27 @@ class TestLinks:
             assert "Alpha" in sent.edit_text.call_args[0][0]
         run_with_db(t)
 
-    def test_folder_link_not_supported(self, fake):
+    def test_folder_link_imported(self, fake):
         async def t(db):
-            await add(db, "test_l2@example.com")
-            up, cx, sent = msg_update(text="https://mega.nz/folder/abc#key")
+            a1, _ = await add(db, "test_l2@example.com")
+            await db.mega_accounts.update_one({"id": a1["id"]}, {"$set": {"save_folder": "A1", "save_folder_name": "Alpha"}})
+            url = "https://mega.nz/folder/abc#key"
+            up, cx, sent = msg_update(text=url)
             await bot.on_text(up, cx)
-            assert "sirf file links" in sent.edit_text.call_args[0][0]
-            assert not any(c[1] == "import_link" for c in fake.calls)
+            assert (a1["id"], "folder_link_info", (url,)) in fake.calls
+            assert (a1["id"], "import_folder_link", (url, "A1")) in fake.calls
+            assert not any(c[1] in ("import_link", "link_info") for c in fake.calls)
+            txt = sent.edit_text.call_args[0][0]
+            assert "Save ho gaya" in txt and "TEST_Shared" in txt and "2 folders, 4 files" in txt and "Alpha" in txt
+        run_with_db(t)
+
+    def test_old_folder_link_format(self, fake):
+        async def t(db):
+            a1, _ = await add(db, "test_l2b@example.com")
+            url = "https://mega.nz/#F!abc!key"
+            up, cx, sent = msg_update(text=url)
+            await bot.on_text(up, cx)
+            assert (a1["id"], "import_folder_link", (url, None)) in fake.calls
         run_with_db(t)
 
     def test_insufficient_space(self, fake):
@@ -303,11 +346,11 @@ class TestLinks:
             fake.storage[a2["id"]] = (5 * GB, 20 * GB)
             fake.storage[a3["id"]] = (10 * GB, 20 * GB)
             # auto off -> active (a1)
-            assert (await bot.pick_account_for(GB))["id"] == a1["id"]
+            assert (await bot.pick_account_for())["id"] == a1["id"]
             up, cx, _ = msg_update()
             await bot.cmd_auto(up, cx)
             assert (await bot.get_state())["auto_switch"] is True
-            assert (await bot.pick_account_for(GB))["id"] == a2["id"]
+            assert (await bot.pick_account_for())["id"] == a2["id"]
             url = "https://mega.nz/file/q#w"
             up, cx, sent = msg_update(text=url)
             await bot.on_text(up, cx)

@@ -4,7 +4,7 @@ import os
 import re
 from cryptography.fernet import Fernet
 from mega import Mega
-from mega.crypto import a32_to_base64, base64_to_a32, base64_url_decode, base64_url_encode, decrypt_attr, decrypt_key, encrypt_attr, encrypt_key
+from mega.crypto import a32_to_base64, base64_to_a32, base64_url_decode, decrypt_attr, decrypt_key, encrypt_key
 
 _fernet = Fernet(os.environ["MEGA_SECRET_KEY"].encode())
 _sessions: dict = {}
@@ -74,6 +74,8 @@ def _public_folder_nodes(m, url):
     m.sequence_num += 1
     r = m._http.post(f"{m.schema}://g.api.{m.domain}/cs", params=params, content=json.dumps([{"a": "f", "c": 1, "r": 1}]),
                      headers={"Content-Type": "application/json"})
+    if not r.text:
+        raise ValueError(f"MEGA ne khali jawab diya (HTTP {r.status_code}), thodi der baad try karo")
     data = r.json()
     data = data[0] if isinstance(data, list) else data
     if isinstance(data, int):
@@ -131,6 +133,15 @@ def node_info(m, handle):
     files = m.get_files()
     f = files[handle]
     return {"handle": handle, "name": f["a"]["n"], "is_file": f["t"] == 0, "size": f.get("s", 0), "parent": f.get("p")}
+
+
+def is_under(m, node, ancestor):
+    files = m.get_files()
+    while node in files:
+        if node == ancestor:
+            return True
+        node = files[node].get("p")
+    return False
 
 
 def delete_node(m, handle):
