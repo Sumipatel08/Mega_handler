@@ -1,0 +1,27 @@
+{
+  "summary": "Backend-only testing of the /newaccount MEGA signup flow and the share-link reply after saving a link. All MEGA calls were mocked: Mega._api_request and _login_process were patched, as were ms.run, register, confirm_signup and login_check. No real signup ran and no second polling instance was started. What was checked: (1) register sends up -> us -> ug -> uc2 in that order. The master key was recovered from the 'up' k using the ephemeral key passed to _login_process, and ts = ssc + AES(ssc, mk) is correct. In uc2, n and m decode to the name and email, v=2, crv and hak are 16 bytes, hak matches sha256(pbkdf2_sha512(pw, sha256('mega.nz'.ljust(200,'P')+crv), 100000, 32)[16:])[:16], and k decrypts with pbkdf2[:16] back to the master key. If there is no sid, it raises before ug. (2) confirm_code accepts the full #confirm link, the link embedded in a sentence, 'confirm<b64>' and the raw b64 fragment. It rejects plain text, unicode, file links, an empty string and valid base64 without ConfirmCodeV2. confirm_signup parses ['x',[b64email,...]] and the flat-list response, returns the email in lowercase, sends {a:ud2, c:<b64>}, and raises on -9, a string, [1,2] or []. (3) _new_handle picks the top-level node under dest and falls back sensibly. import_link returns the new handle. (4) Bot /newaccount checks usage, password length (and deletes the message), and duplicates (register is not called). On success it calls register(email lowercased, pw, local-part), stores mega_signups with a Fernet-encrypted password, and the reply mentions the confirmation link. If register fails, nothing is stored. (5) on_text with a confirm link goes to finish_signup: confirm, login with the decrypted password, store the account (Account 1, set active), delete the signup doc, and no link-save calls are made. Also covered: an unknown email suggests /addaccount, a confirm failure gives an error, and on login failure no account is stored and the signup doc is kept. (6) save_link replies with 'Aapke account ka link' plus the share URL. If share fails, it still reports 'Save ho gaya' with the share error. If there is no new handle, no share call is made. 41/41 pass (14 new, 27 regression) with xdist and with -n 0. ruff F checks are clean and no TEST_ DBs were left behind.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "mega_service.confirm_code", "issue": "CONFIRM_RE 'confirm([\\w-]{20,})' does not match a 'https://mega.nz/confirm/<code>' style link (slash after confirm). That text then falls through to LINK_RE -> save_link and gives a confusing 'Link save nahi hua' error. Allow an optional '/' or '#': r'confirm[/#]?([\\w-]{20,})'."},
+      {"endpoint": "mega_service.confirm_signup", "issue": "Uses Mega._api_request, which returns json_resp[0]. If MEGA ever returns a flat array at the top level, only the first string reaches confirm_signup and it fails. This is unverified live; ud2 parsing was checked against mocked shapes only."},
+      {"endpoint": "bot.finish_signup", "issue": "On login failure the signup doc (encrypted password) is kept, but sending the confirm link again hits ud2 again, and that will probably fail because the link is already used. So the user can only recover with /addaccount and must re-type the password. mega_signups docs never expire. Consider letting the stored signup be retried, or cleaning it up."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_signup_share.py", "/app/backend/tests/test_bot_handlers.py", "/app/backend/tests/test_folder_links_file_actions.py", "/app/backend/tests/test_api_bot.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: widen CONFIRM_RE to accept 'confirm/' and 'confirm#' variants",
+    "Optional: add a TTL or cleanup for stale mega_signups docs, and a retry path when login fails after confirm"
+  ],
+  "critical_code_review_comments": [
+    "The register crypto matches the MEGA v2 webclient scheme as specified. It was verified against mocks only, and uc2/ud2 were not exercised live.",
+    "on_text checks confirm_code before LINK_RE, so the order is correct for '#confirm' links."
+  ],
+  "updated_files": ["/app/backend/tests/test_signup_share.py"],
+  "success_rate": {"backend": "100% (41/41)", "frontend": "skipped"},
+  "seed_data_creation": "None. Throwaway DBs named TEST_bot_handlers_<uuid> were dropped, and none remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/. test_signup_share.py patches ms.Mega._api_request and _login_process to capture the signup payloads. TestShareAfterSave wraps the FakeMega run so import_link returns a handle ('NEWH'). Never start a second polling instance or call real MEGA signup."
+}

@@ -19,5 +19,8 @@
 
 - Folder link import (new + old formats), files listed in browser, item menu: share link, rename, move (move mode), delete to Rubbish Bin
 
+- /newaccount: signup with user's own real email (up/us/ug/uc2), user pastes email confirm link, bot confirms (ud2), logs in, stores account (one per real email, no fake/temp emails)
+- After saving any link, bot replies with share link from user's own account
+
 ## Backlog
 - P2: search, storage alerts, webhook mode for multi-instance deploy

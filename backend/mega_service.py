@@ -71,7 +71,7 @@ def register(email, password, name):
     })
 
 
-CONFIRM_RE = re.compile(r"confirm([\w-]{20,})")
+CONFIRM_RE = re.compile(r"confirm[/#]?([\w-]{20,})")
 
 
 def confirm_code(text):
