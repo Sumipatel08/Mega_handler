@@ -54,6 +54,7 @@ HELP = (
     "📂 /folders ➥ kholo, rename, move, delete, share\n"
     "➕ /newfolder `naam` ➥ naya folder\n"
     "🔁 /auto ➥ auto switch ON/OFF\n"
+    "🔎 /search `naam` ➥ saare accounts mein dhoondo\n"
     "📊 /status ➥ abhi ka account\n"
     "🖼 /wallpaper ➥ anime wallpaper\n\n"
     "🔗 " + sb("MEGA link bhejo") + " ➥ cloud mein save + aapka share link + rename button"
@@ -343,6 +344,36 @@ async def cmd_auto(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Auto switch {'ON: links sabse zyada khali jagah wale account mein jayenge' if auto else 'OFF: links active account mein jayenge'}.")
 
 
+async def cmd_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not await guard(update):
+        return
+    query = " ".join(ctx.args).strip()
+    if len(query) < 2:
+        await update.message.reply_text("Aise likho: /search naam (kam se kam 2 akshar)")
+        return
+    accs = await db.mega_accounts.find({}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    if not accs:
+        await update.message.reply_text("Pehle /newaccount ya /addaccount se account jodo.")
+        return
+    msg = await update.message.reply_text(f"🔎 '{query}' dhoondh raha hoon {len(accs)} accounts mein...")
+    hits, failed = [], []
+    for a in accs:
+        try:
+            hits += [(a, r) for r in await ms.run(a, ms.search, query)]
+        except Exception:
+            failed.append(a["label"])
+    note = f"\n⚠️ In accounts se connect nahi hua: {', '.join(failed)}" if failed else ""
+    if not hits:
+        await msg.edit_text(f"🔎 '{query}' kahin nahi mila.{note}" + CREDIT)
+        return
+    rows = [[B(f"{'📄' if r['is_file'] else '📁'} {r['name'][:40]} · {a['label']}",
+               callback_data=f"{'i' if r['is_file'] else 'o'}:{a['id']}:{r['handle']}")] for a, r in hits[:30]]
+    lines = [f"{'📄' if r['is_file'] else '📁'} {r['name']}\n   👤 {a['label']} ➥ {r['path']}" for a, r in hits[:30]]
+    more = f"\n…aur {len(hits) - 30} results. Naam thoda aur likho." if len(hits) > 30 else ""
+    text = "🔎 " + sb(f"{len(hits)} RESULTS") + f" '{query}'\n\n" + "\n".join(lines) + more + note + CREDIT
+    await msg.edit_text(text[:4000], reply_markup=K(rows))
+
+
 async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not await guard(update):
         return
@@ -386,12 +417,17 @@ async def save_link(update: Update, url: str):
             await msg.edit_text("Kisi bhi account se connect nahi ho paya. Thodi der baad try karo.")
             return
         st = await refresh_storage(acc)
-        if st["total"] - st["used"] < li["size"]:
-            await msg.edit_text(f"{acc['label']} mein jagah kam hai ({gb(st['total'] - st['used'])} khali, file {gb(li['size'])}). /auto ON karo ya naya account jodo.")
-            return
+        free = st["total"] - st["used"]
+        warn = f"\n⚠️ Size {gb(li['size'])} hai, khali sirf {gb(free)}. Phir bhi copy kar raha hoon (MEGA app jaisa)." if free < li["size"] else ""
         extra = f"\n{li['folders']} folders, {li['files']} files" if is_folder else ""
-        await msg.edit_text(f"Save ho raha hai: {li['name']} ({gb(li['size'])}){extra}...")
-        new_h = await ms.run(acc, ms.import_folder_link if is_folder else ms.import_link, url, acc.get("save_folder"))
+        await msg.edit_text(f"Save ho raha hai: {li['name']} ({gb(li['size'])}){extra}{warn}...")
+        try:
+            new_h = await ms.run(acc, ms.import_folder_link if is_folder else ms.import_link, url, acc.get("save_folder"))
+        except Exception as e:
+            if "-17" in str(e) or "quota" in str(e).lower():
+                await msg.edit_text(f"MEGA ne mana kar diya: {acc['label']} ki storage full hai ({gb(free)} khali, chahiye {gb(li['size'])}). /auto ON karo ya dusra account jodo.")
+                return
+            raise
         share = ""
         if new_h:
             try:
@@ -404,7 +440,7 @@ async def save_link(update: Update, url: str):
                      B("📂 Kholo" if is_folder else "⚙️ Options", callback_data=f"{'o' if is_folder else 'i'}:{acc['id']}:{new_h}")]])
         await msg.edit_text(
             "✅ " + sb("SAVE HO GAYA") + "\n\n"
-            f"{'📁' if is_folder else '📄'} {li['name']}{extra}\n👤 {acc['label']}\n📂 {acc.get('save_folder_name') or 'Cloud Drive'}{share}"
+            f"{'📁' if is_folder else '📄'} {li['name']} ({gb(li['size'])}){extra}\n👤 {acc['label']}\n📂 {acc.get('save_folder_name') or 'Cloud Drive'}{warn}{share}"
             + CREDIT,
             disable_web_page_preview=True, reply_markup=kb,
         )
@@ -551,7 +587,7 @@ async def start_bot(database):
         application = Application.builder().token(token).build()
         for name, fn in [("start", cmd_start), ("help", cmd_start), ("myid", cmd_myid), ("addaccount", cmd_addaccount), ("newaccount", cmd_newaccount),
                          ("accounts", cmd_accounts), ("folders", cmd_folders), ("newfolder", cmd_newfolder),
-                         ("auto", cmd_auto), ("wallpaper", cmd_wallpaper), ("status", cmd_status)]:
+                         ("auto", cmd_auto), ("search", cmd_search), ("wallpaper", cmd_wallpaper), ("status", cmd_status)]:
             application.add_handler(CommandHandler(name, fn))
         application.add_handler(CallbackQueryHandler(on_button))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

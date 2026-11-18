@@ -183,6 +183,34 @@ def list_folder(m, handle=None):
     return {"handle": handle, "name": name, "is_root": handle == root, "parent": parent, "folders": subs, "files": file_list, "file_count": file_count}
 
 
+def search(m, query):
+    files = m.get_files()
+    root = m._root_node_id()
+    q = query.lower()
+
+    def path(h):
+        parts = []
+        h = files[h].get("p")
+        while h in files and h != root:
+            parts.append(files[h]["a"]["n"])
+            h = files[h].get("p")
+        return "/".join(["Cloud Drive"] + parts[::-1])
+
+    def in_drive(h):
+        while h in files:
+            if h == root:
+                return True
+            h = files[h].get("p")
+        return False
+
+    out = [
+        {"handle": h, "name": f["a"]["n"], "is_file": f["t"] == 0, "path": path(h)}
+        for h, f in files.items()
+        if f.get("t") in (0, 1) and f.get("a") and q in f["a"]["n"].lower() and in_drive(h)
+    ]
+    return sorted(out, key=lambda r: (r["is_file"], r["name"].lower()))
+
+
 def node_info(m, handle):
     files = m.get_files()
     f = files[handle]
