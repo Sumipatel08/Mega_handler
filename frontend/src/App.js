@@ -12,6 +12,8 @@ const COMMANDS = [
   ["/folders", "Buttons se folder kholo, rename karo, save folder chuno"],
   ["/newfolder naam", "Selected folder mein naya folder"],
   ["/auto", "Link sabse zyada khali jagah wale account mein jaye"],
+  ["/status", "Abhi ka account, save folder aur auto switch"],
+  ["/wallpaper", "Random anime wallpaper"],
   ["MEGA link bhejo", "Cloud mein save, aur badle mein aapke account ka share link"],
 ];
 

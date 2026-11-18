@@ -17,7 +17,7 @@ body { background: var(--bg); color: var(--text); font-family: "Bricolage Grotes
 h1 { font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
 .eyebrow { display: flex; align-items: center; gap: 8px; font-family: "JetBrains Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 16px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 28px; }
-.handle { display: block; margin-top: 16px; font-size: 32px; font-weight: 800; color: var(--text); transition: color 0.2s; }
+.handle { display: block; overflow-wrap: anywhere; margin-top: 16px; font-size: 32px; font-weight: 800; color: var(--text); transition: color 0.2s; }
 .handle:hover { color: var(--accent); }
 .dot { width: 10px; height: 10px; border-radius: 50%; }
 .dot-on { background: var(--ok); box-shadow: 0 0 12px var(--ok); animation: pulse 2s infinite; }
@@ -36,3 +36,5 @@ h1 { font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
 .hero { background-size: cover; background-position: center; border: 1px solid var(--line); border-radius: 4px; padding: 56px 40px; }
 .credit { margin-top: 64px; font-family: "JetBrains Mono", monospace; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 .credit span { color: var(--accent); font-weight: 600; }
+.shell section > * { min-width: 0; }
+@media (max-width: 640px) { .handle { font-size: 24px; } .hero { padding: 36px 20px; } }

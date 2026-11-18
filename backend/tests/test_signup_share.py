@@ -226,7 +226,7 @@ class TestShareAfterSave:
             await bot.on_text(up, cx)
             assert (a1["id"], "share_link", ("NEWH",)) in fake.calls
             txt = sent.edit_text.call_args[0][0]
-            assert "Save ho gaya" in txt and "Aapke account ka link" in txt and "https://mega.nz/file/F1#KEY" in txt
+            assert bot.sb("SAVE HO GAYA") in txt and "Aapke account ka link" in txt and "https://mega.nz/file/F1#KEY" in txt
         run_with_db(t)
 
     def test_share_failure_still_saved(self, fake, monkeypatch):
@@ -237,7 +237,7 @@ class TestShareAfterSave:
             up, cx, sent = msg_update(text="https://mega.nz/file/abc#def")
             await bot.on_text(up, cx)
             txt = sent.edit_text.call_args[0][0]
-            assert "Save ho gaya" in txt and "Share link nahi bana" in txt and "export down" in txt
+            assert bot.sb("SAVE HO GAYA") in txt and "Share link nahi bana" in txt and "export down" in txt
             assert "Link save nahi hua" not in txt
         run_with_db(t)
 
@@ -247,5 +247,5 @@ class TestShareAfterSave:
             up, cx, sent = msg_update(text="https://mega.nz/folder/abc#key")
             await bot.on_text(up, cx)
             assert not any(c[1] == "share_link" for c in fake.calls)
-            assert "Save ho gaya" in sent.edit_text.call_args[0][0]
+            assert bot.sb("SAVE HO GAYA") in sent.edit_text.call_args[0][0]
         run_with_db(t)

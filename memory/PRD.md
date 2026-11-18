@@ -22,5 +22,7 @@
 - /newaccount: signup with user's own real email (up/us/ug/uc2), user pastes email confirm link, bot confirms (ud2), logs in, stores account (one per real email, no fake/temp emails)
 - After saving any link, bot replies with share link from user's own account
 
+- Save reply has Rename + Open/Options buttons for the copied item; stylish unicode-bold text, anime wallpapers (/start, /wallpaper), credit 'Made by DD FREE DISH' in bot + dashboard
+
 ## Backlog
 - P2: search, storage alerts, webhook mode for multi-instance deploy

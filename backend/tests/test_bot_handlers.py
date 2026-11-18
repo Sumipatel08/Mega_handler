@@ -300,7 +300,7 @@ class TestLinks:
             up, cx, sent = msg_update(text=f"save this {url}")
             await bot.on_text(up, cx)
             assert (a1["id"], "import_link", (url, "A1")) in fake.calls
-            assert "Save ho gaya" in sent.edit_text.call_args[0][0]
+            assert bot.sb("SAVE HO GAYA") in sent.edit_text.call_args[0][0]
             assert "Alpha" in sent.edit_text.call_args[0][0]
         run_with_db(t)
 
@@ -315,7 +315,7 @@ class TestLinks:
             assert (a1["id"], "import_folder_link", (url, "A1")) in fake.calls
             assert not any(c[1] in ("import_link", "link_info") for c in fake.calls)
             txt = sent.edit_text.call_args[0][0]
-            assert "Save ho gaya" in txt and "TEST_Shared" in txt and "2 folders, 4 files" in txt and "Alpha" in txt
+            assert bot.sb("SAVE HO GAYA") in txt and "TEST_Shared" in txt and "2 folders, 4 files" in txt and "Alpha" in txt
         run_with_db(t)
 
     def test_old_folder_link_format(self, fake):
