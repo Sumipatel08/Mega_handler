@@ -162,7 +162,9 @@ async def cmd_newaccount(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(
         f"Signup shuru ho gaya: {email}\n\n"
         "MEGA ne aapke email par ek confirmation link bheja hai (ye OTP nahi, ek link hota hai). "
-        "Email kholo, 'Verify my email' button ka link copy karke yahan bhej do. Bot account confirm karke jod dega.\n"
+        "Email kholo, 'Verify my email' button ka link copy karke yahan bhej do. Bot account confirm karke jod dega.\n\n"
+        "Mail 5-10 minute mein na aaye to Spam/Promotions folder dekho. Temporary/disposable email services par MEGA mail nahi bhejta, "
+        "isliye apna asli email (Gmail, Outlook wagera) use karo.\n"
         "(Password wala message delete kar diya gaya)"
     )
 
