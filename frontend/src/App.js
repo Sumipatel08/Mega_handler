@@ -11,7 +11,7 @@ const COMMANDS = [
   ["/folders", "Buttons se folder kholo, rename karo, save folder chuno"],
   ["/newfolder naam", "Selected folder mein naya folder"],
   ["/auto", "Link sabse zyada khali jagah wale account mein jaye"],
-  ["MEGA link bhejo", "File seedha aapke cloud mein save"],
+  ["MEGA link bhejo", "File ya poora folder seedha aapke cloud mein save"],
 ];
 
 const gb = (n) => `${(n / 1073741824).toFixed(2)} GB`;

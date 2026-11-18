@@ -29,7 +29,8 @@ HELP = (
     "/auto - auto switch ON/OFF (link sabse zyada khali jagah wale account mein)\n"
     "/status - abhi ka account aur save folder\n"
     "/myid - aapki Telegram ID\n\n"
-    "Koi bhi MEGA file link bhejo, bot use cloud mein save kar dega."
+    "Koi bhi MEGA file ya folder link bhejo, bot use cloud mein save kar dega.\n"
+    "/folders mein file/folder dabao: share link, rename, move, delete."
 )
 
 
@@ -160,15 +161,39 @@ async def folder_view(acc, handle=None):
         f"{len(f['folders'])} folders, {f['file_count']} files\n"
         f"Save folder: {em(acc.get('save_folder_name') or 'Cloud Drive')}{' (yahi)' if selected else ''}"
     )
-    rows = [[B(f"📁 {name}", callback_data=f"o:{acc['id']}:{h}")] for h, name in f["folders"][:40]]
+    moving = (await get_state()).get("moving")
+    moving = moving if moving and moving["acc"] == acc["id"] else None
+    if moving:
+        text += f"\n\n*Move:* {em(moving['name'])}\nJis folder mein le jaana hai wahan jao aur 'Yaha move karo' dabao."
+    a = acc["id"]
+    rows = [[B(f"📁 {name}", callback_data=f"o:{a}:{h}")] for h, name in f["folders"][:35]]
+    if not moving:
+        rows += [[B(f"📄 {name}", callback_data=f"i:{a}:{h}")] for h, name in f["files"][:35]]
     nav = []
     if not f["is_root"]:
-        nav.append(B("⬆️ Upar", callback_data=f"o:{acc['id']}:{f['parent']}"))
-        nav.append(B("✏️ Rename", callback_data=f"r:{acc['id']}:{f['handle']}"))
+        nav.append(B("⬆️ Upar", callback_data=f"o:{a}:{f['parent']}"))
+        if not moving:
+            nav.append(B("⚙️ Is folder ke options", callback_data=f"i:{a}:{f['handle']}"))
     rows.append(nav) if nav else None
-    rows.append([B("✅ Yaha save karo", callback_data=f"s:{acc['id']}:{f['handle']}"), B("➕ Naya folder", callback_data=f"n:{acc['id']}:{f['handle']}")])
+    if moving:
+        rows.append([B("📥 Yaha move karo", callback_data=f"mv:{a}:{f['handle']}"), B("❌ Cancel", callback_data=f"mc:{a}:{f['handle']}")])
+    else:
+        rows.append([B("✅ Yaha save karo", callback_data=f"s:{a}:{f['handle']}"), B("➕ Naya folder", callback_data=f"n:{a}:{f['handle']}")])
     rows.append([B("🔁 Account badlo", callback_data="accs")])
     return text, K(rows)
+
+
+async def item_menu(q, acc, handle):
+    n = await ms.run(acc, ms.node_info, handle)
+    a = acc["id"]
+    kind = "File" if n["is_file"] else "Folder"
+    size = f"\nSize: {gb(n['size'])}" if n["is_file"] else ""
+    kb = K([
+        [B("🔗 Share link", callback_data=f"sh:{a}:{handle}"), B("✏️ Rename", callback_data=f"r:{a}:{handle}")],
+        [B("📦 Move", callback_data=f"m:{a}:{handle}"), B("🗑 Delete", callback_data=f"d:{a}:{handle}")],
+        [B("⬅️ Wapas", callback_data=f"o:{a}:{n['parent']}")] if n["is_file"] else [B("📂 Kholo", callback_data=f"o:{a}:{handle}"), B("⬅️ Wapas", callback_data=f"o:{a}:{n['parent']}")],
+    ])
+    await q.edit_message_text(f"*{kind}:* {em(n['name'])}{size}", parse_mode="Markdown", reply_markup=kb)
 
 
 async def cmd_folders(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -245,15 +270,13 @@ async def pick_account_for():
 
 async def save_link(update: Update, url: str):
     msg = await update.message.reply_text("Link check ho raha hai...")
-    if "/folder/" in url or "#F!" in url:
-        await msg.edit_text("Abhi sirf file links (mega.nz/file/...) save hote hain. Folder links jaldi aayenge.")
-        return
+    is_folder = ms.is_folder_link(url)
     any_acc = await active_account()
     if not any_acc:
         await msg.edit_text("Pehle /addaccount se account jodo.")
         return
     try:
-        li = await ms.run(any_acc, ms.link_info, url)
+        li = await ms.run(any_acc, ms.folder_link_info if is_folder else ms.link_info, url)
         acc = await pick_account_for()
         if not acc:
             await msg.edit_text("Kisi bhi account se connect nahi ho paya. Thodi der baad try karo.")
@@ -262,9 +285,10 @@ async def save_link(update: Update, url: str):
         if st["total"] - st["used"] < li["size"]:
             await msg.edit_text(f"{acc['label']} mein jagah kam hai ({gb(st['total'] - st['used'])} khali, file {gb(li['size'])}). /auto ON karo ya naya account jodo.")
             return
-        await msg.edit_text(f"Save ho raha hai: {li['name']} ({gb(li['size'])})...")
-        await ms.run(acc, ms.import_link, url, acc.get("save_folder"))
-        await msg.edit_text(f"Save ho gaya: {li['name']}\nAccount: {acc['label']}\nFolder: {acc.get('save_folder_name') or 'Cloud Drive'}")
+        extra = f"\n{li['folders']} folders, {li['files']} files" if is_folder else ""
+        await msg.edit_text(f"Save ho raha hai: {li['name']} ({gb(li['size'])}){extra}...")
+        await ms.run(acc, ms.import_folder_link if is_folder else ms.import_link, url, acc.get("save_folder"))
+        await msg.edit_text(f"Save ho gaya: {'📁 ' if is_folder else ''}{li['name']}{extra}\nAccount: {acc['label']}\nFolder: {acc.get('save_folder_name') or 'Cloud Drive'}")
     except Exception as e:
         await msg.edit_text(f"Link save nahi hua. Link sahi hai? ({e})")
 
@@ -293,7 +317,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         else:
             await make_folder(acc, text, pending["h"])
             await update.message.reply_text(f"Folder '{text}' ban gaya.")
-        tv, kb = await folder_view(await get_account(acc["id"]), pending["h"])
+        tv, kb = await folder_view(await get_account(acc["id"]), pending.get("back") or pending["h"])
         await update.message.reply_text(tv, parse_mode="Markdown", reply_markup=kb)
     except Exception as e:
         await update.message.reply_text(f"Nahi hua: {e}")
@@ -339,8 +363,39 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             text, kb = await folder_view(await get_account(acc["id"]), arg)
             await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
             await q.message.reply_text(f"Ab links '{f['name']}' mein save honge ({acc['label']}).")
+        elif action == "i":
+            await item_menu(q, acc, arg)
+        elif action == "sh":
+            link = await ms.run(acc, ms.share_link, arg)
+            await q.message.reply_text(f"Share link:\n{link}", disable_web_page_preview=True)
+        elif action == "d":
+            node = await ms.run(acc, ms.node_info, arg)
+            kb = K([[B("Haan, delete karo", callback_data=f"dx:{acc['id']}:{arg}"), B("Nahi", callback_data=f"i:{acc['id']}:{arg}")]])
+            await q.edit_message_text(f"'{node['name']}' delete karein? Ye Rubbish Bin mein chala jayega.", reply_markup=kb)
+        elif action == "dx":
+            node = await ms.run(acc, ms.node_info, arg)
+            await ms.run(acc, ms.delete_node, arg)
+            if acc.get("save_folder") == arg:
+                await db.mega_accounts.update_one({"id": acc["id"]}, {"$set": {"save_folder": None, "save_folder_name": "Cloud Drive"}})
+            text, kb = await folder_view(await get_account(acc["id"]), node["parent"])
+            await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+            await q.message.reply_text(f"'{node['name']}' Rubbish Bin mein chala gaya.")
+        elif action == "m":
+            node = await ms.run(acc, ms.node_info, arg)
+            await set_state(moving={"acc": acc["id"], "h": arg, "name": node["name"]})
+            text, kb = await folder_view(acc, node["parent"])
+            await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+        elif action in ("mv", "mc"):
+            moving = (await get_state()).get("moving")
+            await set_state(moving=None)
+            if action == "mv" and moving:
+                await ms.run(acc, ms.move_node, moving["h"], arg)
+                await q.message.reply_text(f"'{moving['name']}' move ho gaya.")
+            text, kb = await folder_view(acc, arg)
+            await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
         elif action in ("r", "n"):
-            await set_state(pending={"type": "rename" if action == "r" else "mkdir", "h": arg, "acc": acc["id"]})
+            back = (await ms.run(acc, ms.node_info, arg))["parent"] if action == "r" else arg
+            await set_state(pending={"type": "rename" if action == "r" else "mkdir", "h": arg, "acc": acc["id"], "back": back})
             await q.message.reply_text("Naya naam likh kar bhejo:" if action == "r" else "Naye folder ka naam likh kar bhejo:")
     except Exception as e:
         await q.message.reply_text(f"Error: {e}")
