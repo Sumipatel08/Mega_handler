@@ -137,7 +137,12 @@ class TestNewAccountBot:
             reg.assert_called_once_with(EMAIL, "longpass1", "test_signup")
             doc = await db.mega_signups.find_one({"email": EMAIL})
             assert doc and doc["password_enc"] != "longpass1" and ms.decrypt(doc["password_enc"]) == "longpass1"
-            assert "confirmation link" in sent.edit_text.call_args[0][0]
+            reply = sent.edit_text.call_args[0][0]
+            assert "confirmation link" in reply and EMAIL in reply
+            # new guidance: spam/promotions + disposable email warning (iteration 4)
+            assert "Spam/Promotions" in reply
+            assert "Temporary/disposable" in reply and "asli email" in reply
+            assert "Password wala message delete" in reply
         run_with_db(t)
 
     def test_newaccount_register_fail(self, fake, monkeypatch):
