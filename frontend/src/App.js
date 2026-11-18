@@ -15,6 +15,8 @@ const COMMANDS = [
   ["MEGA link bhejo", "Cloud mein save, aur badle mein aapke account ka share link"],
 ];
 
+const HERO = "https://static.prod-images.emergentagent.com/jobs/73ca01de-7b97-454b-a19b-b49039c92a31/images/e1c8bfcdbe14f935f045b9e8f082e2b173abcc488c0883a2c84ab7c55fc4504d.jpeg";
+
 const gb = (n) => `${(n / 1073741824).toFixed(2)} GB`;
 
 const StatusCard = ({ status }) => {
@@ -83,7 +85,7 @@ export default function App() {
 
   return (
     <main className="shell">
-      <header className="rise">
+      <header className="rise hero" style={{ backgroundImage: `linear-gradient(90deg, rgba(13,15,14,0.95) 35%, rgba(13,15,14,0.35)), url(${HERO})` }}>
         <p className="eyebrow"><Bot size={14} /> Telegram x MEGA</p>
         <h1 className="text-4xl sm:text-5xl lg:text-6xl">MEGA Manager Bot</h1>
         <p className="mt-4 max-w-xl text-base text-[var(--muted)]">
@@ -120,6 +122,7 @@ export default function App() {
           )}
         </div>
       </section>
+      <footer data-testid="credit-footer" className="credit">Made by <span>DD FREE DISH</span></footer>
     </main>
   );
 }

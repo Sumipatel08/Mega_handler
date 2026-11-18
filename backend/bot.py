@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import os
 import uuid
 from datetime import datetime, timezone
@@ -21,19 +22,48 @@ db = None
 application: Application | None = None
 info = {"running": False, "username": None, "error": None}
 
+def sb(text: str) -> str:
+    out = []
+    for c in text:
+        if "A" <= c <= "Z":
+            out.append(chr(0x1D5D4 + ord(c) - 65))
+        elif "a" <= c <= "z":
+            out.append(chr(0x1D5EE + ord(c) - 97))
+        elif "0" <= c <= "9":
+            out.append(chr(0x1D7EC + ord(c) - 48))
+        else:
+            out.append(c)
+    return "".join(out)
+
+
+CREDIT = "\n\n━━━━━━━━━━━━━━\n⚡ " + sb("Made by DD FREE DISH")
+
+WALLPAPERS = [
+    "https://static.prod-images.emergentagent.com/jobs/73ca01de-7b97-454b-a19b-b49039c92a31/images/3c6c4aa77545256565a30c79546da7e74b09f7016c3b69d685f95450be112427.jpeg",
+    "https://static.prod-images.emergentagent.com/jobs/73ca01de-7b97-454b-a19b-b49039c92a31/images/cda39dc1146be090b1b2c726dc44c33af2aa0e72d1b4c05701c5094549415f5c.jpeg",
+    "https://static.prod-images.emergentagent.com/jobs/73ca01de-7b97-454b-a19b-b49039c92a31/images/e1c8bfcdbe14f935f045b9e8f082e2b173abcc488c0883a2c84ab7c55fc4504d.jpeg",
+    "https://static.prod-images.emergentagent.com/jobs/73ca01de-7b97-454b-a19b-b49039c92a31/images/518bcfda9b1287e1b388f38ef28aae5195c6b041aaf1688515adef129d50d2a6.jpeg",
+]
+
 HELP = (
-    "*MEGA Manager Bot*\n\n"
-    "/newaccount `email password` - aapke email se naya MEGA account banao (email ka confirm link bot ko bhejna hoga)\n"
-    "/addaccount `email password` - pehle se bana MEGA account jodo\n"
-    "/accounts - saare accounts, khali jagah, switch/hatao\n"
-    "/folders - folder browser (buttons se kholo, rename, select)\n"
-    "/newfolder `naam` - selected folder mein naya folder\n"
-    "/auto - auto switch ON/OFF (link sabse zyada khali jagah wale account mein)\n"
-    "/status - abhi ka account aur save folder\n"
-    "/myid - aapki Telegram ID\n\n"
-    "Koi bhi MEGA file ya folder link bhejo, bot use cloud mein save kar dega.\n"
-    "/folders mein file/folder dabao: share link, rename, move, delete."
+    "☁️ " + sb("MEGA MANAGER BOT") + " ☁️\n"
+    "🔒 " + sb("Sirf aapke liye") + "\n\n"
+    "🆕 /newaccount `email password`\n   ➥ asli email se naya MEGA account\n"
+    "🔑 /addaccount `email password`\n   ➥ pehle se bana account jodo\n"
+    "👥 /accounts ➥ accounts, khali jagah, switch\n"
+    "📂 /folders ➥ kholo, rename, move, delete, share\n"
+    "➕ /newfolder `naam` ➥ naya folder\n"
+    "🔁 /auto ➥ auto switch ON/OFF\n"
+    "📊 /status ➥ abhi ka account\n"
+    "🖼 /wallpaper ➥ anime wallpaper\n\n"
+    "🔗 " + sb("MEGA link bhejo") + " ➥ cloud mein save + aapka share link + rename button"
+    + CREDIT
 )
+
+START_KB = K([
+    [B("👥 Accounts", callback_data="accs"), B("📂 Folders", callback_data="fo")],
+    [B("🖼 Wallpaper", callback_data="wp")],
+])
 
 
 def owner_id() -> int:
@@ -85,7 +115,12 @@ async def guard(update: Update) -> bool:
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if await guard(update):
-        await update.message.reply_text(HELP, parse_mode="Markdown")
+        await update.message.reply_photo(random.choice(WALLPAPERS), caption=HELP, parse_mode="Markdown", reply_markup=START_KB)
+
+
+async def cmd_wallpaper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if await guard(update):
+        await update.message.reply_photo(random.choice(WALLPAPERS), caption="🖼 " + sb("Anime Wallpaper") + CREDIT)
 
 
 async def cmd_myid(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -199,7 +234,7 @@ async def accounts_view():
     if not accs:
         return "Koi account nahi juda. /addaccount email password se jodo.", None
     active = (await active_account())["id"]
-    lines, rows = ["*Aapke MEGA accounts*\n"], []
+    lines, rows = ["👥 " + sb("AAPKE MEGA ACCOUNTS") + "\n"], []
     for a in accs:
         try:
             st = await refresh_storage(a)
@@ -210,7 +245,7 @@ async def accounts_view():
         rows.append([B(f"Use {a['label']}", callback_data=f"ua:{a['id']}"), B(f"Hatao {a['label']}", callback_data=f"rc:{a['id']}")])
     auto = s.get("auto_switch", False)
     rows.append([B(f"Auto switch: {'ON' if auto else 'OFF'}", callback_data="auto")])
-    return "\n".join(lines), K(rows)
+    return "\n".join(lines) + CREDIT, K(rows)
 
 
 async def cmd_accounts(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -225,7 +260,7 @@ async def folder_view(acc, handle=None):
     f = await ms.run(acc, ms.list_folder, handle)
     selected = acc.get("save_folder") == f["handle"] or (f["is_root"] and not acc.get("save_folder"))
     text = (
-        f"*{em(acc['label'])}* > {em(f['name'])}\n"
+        f"📂 *{em(acc['label'])}* ➥ {em(f['name'])}\n"
         f"{len(f['folders'])} folders, {f['file_count']} files\n"
         f"Save folder: {em(acc.get('save_folder_name') or 'Cloud Drive')}{' (yahi)' if selected else ''}"
     )
@@ -363,9 +398,15 @@ async def save_link(update: Update, url: str):
                 share = "\n\nAapke account ka link:\n" + await ms.run(acc, ms.share_link, new_h)
             except Exception as e:
                 share = f"\n\n(Share link nahi bana: {e})"
+        kb = None
+        if new_h:
+            kb = K([[B("✏️ Naam badlo", callback_data=f"r:{acc['id']}:{new_h}"),
+                     B("📂 Kholo" if is_folder else "⚙️ Options", callback_data=f"{'o' if is_folder else 'i'}:{acc['id']}:{new_h}")]])
         await msg.edit_text(
-            f"Save ho gaya: {'📁 ' if is_folder else ''}{li['name']}{extra}\nAccount: {acc['label']}\nFolder: {acc.get('save_folder_name') or 'Cloud Drive'}{share}",
-            disable_web_page_preview=True,
+            "✅ " + sb("SAVE HO GAYA") + "\n\n"
+            f"{'📁' if is_folder else '📄'} {li['name']}{extra}\n👤 {acc['label']}\n📂 {acc.get('save_folder_name') or 'Cloud Drive'}{share}"
+            + CREDIT,
+            disable_web_page_preview=True, reply_markup=kb,
         )
     except Exception as e:
         await msg.edit_text(f"Link save nahi hua. Link sahi hai? ({e})")
@@ -421,7 +462,22 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 await db.mega_accounts.delete_one({"id": arg})
                 ms.forget(arg)
             text, kb = await accounts_view()
-            await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+            if isinstance(q.message.photo, tuple) and q.message.photo:
+                await q.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
+            else:
+                await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+            return
+        if action == "wp":
+            await q.message.reply_photo(random.choice(WALLPAPERS), caption="🖼 " + sb("Anime Wallpaper") + CREDIT)
+            return
+        if action == "fo":
+            acc = await active_account()
+            if not acc:
+                await q.message.reply_text("Pehle /newaccount ya /addaccount se account jodo.")
+                return
+            await set_state(moving=None, pending=None)
+            text, kb = await folder_view(acc, acc.get("save_folder"))
+            await q.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
             return
         if action == "rc":
             acc = await get_account(arg)
@@ -479,7 +535,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         elif action in ("r", "n"):
             back = (await ms.run(acc, ms.node_info, arg))["parent"] if action == "r" else arg
             await set_state(pending={"type": "rename" if action == "r" else "mkdir", "h": arg, "acc": acc["id"], "back": back})
-            await q.message.reply_text("Naya naam likh kar bhejo:" if action == "r" else "Naye folder ka naam likh kar bhejo:")
+            await q.message.reply_text("✏️ " + sb("Naya naam likh kar bhejo") if action == "r" else "➕ " + sb("Naye folder ka naam likh kar bhejo"))
     except Exception as e:
         await q.message.reply_text(f"Error: {e}")
 
@@ -495,7 +551,7 @@ async def start_bot(database):
         application = Application.builder().token(token).build()
         for name, fn in [("start", cmd_start), ("help", cmd_start), ("myid", cmd_myid), ("addaccount", cmd_addaccount), ("newaccount", cmd_newaccount),
                          ("accounts", cmd_accounts), ("folders", cmd_folders), ("newfolder", cmd_newfolder),
-                         ("auto", cmd_auto), ("status", cmd_status)]:
+                         ("auto", cmd_auto), ("wallpaper", cmd_wallpaper), ("status", cmd_status)]:
             application.add_handler(CommandHandler(name, fn))
         application.add_handler(CallbackQueryHandler(on_button))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
