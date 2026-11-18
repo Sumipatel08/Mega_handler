@@ -1,10 +1,11 @@
 import asyncio
+import hashlib
 import json
 import os
 import re
 from cryptography.fernet import Fernet
 from mega import Mega
-from mega.crypto import a32_to_base64, base64_to_a32, base64_url_decode, decrypt_attr, decrypt_key, encrypt_key
+from mega.crypto import a32_to_base64, a32_to_str, base64_to_a32, base64_url_decode, base64_url_encode, decrypt_attr, decrypt_key, encrypt_key, str_to_a32
 
 _fernet = Fernet(os.environ["MEGA_SECRET_KEY"].encode())
 _sessions: dict = {}
@@ -45,6 +46,57 @@ async def run(acc: dict, fn, *args):
                 forget(acc["id"])
                 if attempt == 2:
                     raise
+
+
+def _rand_a32():
+    return str_to_a32(os.urandom(16))
+
+
+def register(email, password, name):
+    m = Mega()
+    mk, ek, ssc = _rand_a32(), _rand_a32(), _rand_a32()
+    ts = base64_url_encode(a32_to_str(ssc) + a32_to_str(encrypt_key(ssc, mk)))
+    user = m._api_request({"a": "up", "k": a32_to_base64(encrypt_key(mk, ek)), "ts": ts})
+    m._login_process(m._api_request({"a": "us", "user": user}), ek)
+    if not m.sid:
+        raise ValueError("MEGA ne signup session nahi diya")
+    m._api_request({"a": "ug"})
+    crv = os.urandom(16)
+    salt = hashlib.sha256(b"mega.nz".ljust(200, b"P") + crv).digest()
+    dk = hashlib.pbkdf2_hmac("sha512", password.encode(), salt, 100000, 32)
+    m._api_request({
+        "a": "uc2", "n": base64_url_encode(name.encode()), "m": base64_url_encode(email.encode()),
+        "crv": base64_url_encode(crv), "hak": base64_url_encode(hashlib.sha256(dk[16:]).digest()[:16]),
+        "k": a32_to_base64(encrypt_key(mk, str_to_a32(dk[:16]))), "v": 2,
+    })
+
+
+CONFIRM_RE = re.compile(r"confirm([\w-]{20,})")
+
+
+def confirm_code(text):
+    hit = CONFIRM_RE.search(text)
+    raw = hit.group(1) if hit else text.strip()
+    try:
+        code = base64_url_decode(raw)
+    except Exception:
+        return None
+    return code if b"ConfirmCodeV2" in code else None
+
+
+def confirm_signup(code):
+    res = Mega()._api_request({"a": "ud2", "c": base64_url_encode(code)})
+    payload = next((x for x in res if isinstance(x, list)), res) if isinstance(res, list) else None
+    if not payload or not isinstance(payload[0], str):
+        raise ValueError(f"Confirm nahi hua (MEGA jawab: {res})")
+    email = base64_url_decode(payload[0])
+    return (email.decode() if isinstance(email, bytes) else email).lower()
+
+
+def _new_handle(res, dest):
+    nodes = res.get("f", []) if isinstance(res, dict) else []
+    top = [n for n in nodes if n.get("p") == dest] or nodes
+    return top[0]["h"] if top else None
 
 
 def storage(m):
@@ -105,9 +157,11 @@ def import_folder_link(m, url, dest=None):
         if n["p"] in ids:
             item["p"] = n["p"]
         items.append(item)
-    res = m._api_request({"a": "p", "t": dest or m._root_node_id(), "n": items, "v": 3, "i": m.request_id, "sm": 1})
+    dest = dest or m._root_node_id()
+    res = m._api_request({"a": "p", "t": dest, "n": items, "v": 3, "i": m.request_id, "sm": 1})
     if isinstance(res, int) and res < 0:
         raise ValueError(f"MEGA error {res}")
+    return _new_handle(res, dest)
 
 
 def list_folder(m, handle=None):
@@ -187,5 +241,5 @@ def link_info(m, url):
 def import_link(m, url, dest=None):
     info = link_info(m, url)
     dest = dest or m._root_node_id()
-    m.import_public_file(info["handle"], info["key"], dest_node={"h": dest}, dest_name=info["name"])
-    return info
+    res = m.import_public_file(info["handle"], info["key"], dest_node={"h": dest}, dest_name=info["name"])
+    return _new_handle(res, dest)

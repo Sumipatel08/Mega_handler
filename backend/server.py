@@ -30,6 +30,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("email", ASCENDING)], name="email", unique=True),
         IndexModel([("created_at", ASCENDING)], name="created_at"),
     ],
+    "mega_signups": [IndexModel([("email", ASCENDING)], name="email", unique=True)],
     "status_checks": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("timestamp", DESCENDING)], name="timestamp_desc"),

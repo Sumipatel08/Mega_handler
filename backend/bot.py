@@ -23,7 +23,8 @@ info = {"running": False, "username": None, "error": None}
 
 HELP = (
     "*MEGA Manager Bot*\n\n"
-    "/addaccount `email password` - apna MEGA account jodo\n"
+    "/newaccount `email password` - aapke email se naya MEGA account banao (email ka confirm link bot ko bhejna hoga)\n"
+    "/addaccount `email password` - pehle se bana MEGA account jodo\n"
     "/accounts - saare accounts, khali jagah, switch/hatao\n"
     "/folders - folder browser (buttons se kholo, rename, select)\n"
     "/newfolder `naam` - selected folder mein naya folder\n"
@@ -113,6 +114,11 @@ async def cmd_addaccount(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await msg.edit_text(f"Login fail hua. Email/password check karo.\n({e})")
         return
+    acc = await store_account(email, password, m, st)
+    await msg.edit_text(f"{acc['label']} jud gaya: {email}\nKhali jagah: {gb(st['total'] - st['used'])} / {gb(st['total'])}\n(Password wala message delete kar diya gaya)")
+
+
+async def store_account(email, password, m, st):
     count = await db.mega_accounts.count_documents({})
     acc = {
         "id": uuid.uuid4().hex[:8], "label": f"Account {count + 1}", "email": email,
@@ -123,7 +129,66 @@ async def cmd_addaccount(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ms._sessions[acc["id"]] = m
     if count == 0:
         await set_state(active_account_id=acc["id"])
-    await msg.edit_text(f"{acc['label']} jud gaya: {email}\nKhali jagah: {gb(st['total'] - st['used'])} / {gb(st['total'])}\n(Password wala message delete kar diya gaya)")
+    return acc
+
+
+async def cmd_newaccount(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not await guard(update):
+        return
+    chat = update.effective_chat
+    if len(ctx.args) != 2:
+        await update.message.reply_text("Aise likho: /newaccount aapka@email.com password\n(Email aapka asli hona chahiye, MEGA us par confirm link bhejega)")
+        return
+    email, password = ctx.args[0].strip().lower(), ctx.args[1]
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+    if len(password) < 8:
+        await chat.send_message("Password kam se kam 8 characters ka rakho.")
+        return
+    if await db.mega_accounts.find_one({"email": email}):
+        await chat.send_message("Ye email pehle se bot mein juda hai.")
+        return
+    msg = await chat.send_message("MEGA par account bana raha hoon...")
+    try:
+        await asyncio.to_thread(ms.register, email, password, email.split("@")[0])
+    except Exception as e:
+        await msg.edit_text(f"Signup nahi hua: {e}\n(Shayad is email se MEGA account pehle se hai, tab /addaccount use karo)")
+        return
+    await db.mega_signups.update_one(
+        {"email": email}, {"$set": {"email": email, "password_enc": ms.encrypt(password), "created_at": datetime.now(timezone.utc).isoformat()}}, upsert=True
+    )
+    await msg.edit_text(
+        f"Signup shuru ho gaya: {email}\n\n"
+        "MEGA ne aapke email par ek confirmation link bheja hai (ye OTP nahi, ek link hota hai). "
+        "Email kholo, 'Verify my email' button ka link copy karke yahan bhej do. Bot account confirm karke jod dega.\n"
+        "(Password wala message delete kar diya gaya)"
+    )
+
+
+async def finish_signup(update: Update, code: bytes):
+    msg = await update.message.reply_text("Account confirm ho raha hai...")
+    try:
+        email = await asyncio.to_thread(ms.confirm_signup, code)
+    except Exception as e:
+        await msg.edit_text(f"Confirm nahi hua. Link sahi aur naya hai? ({e})")
+        return
+    sign = await db.mega_signups.find_one({"email": email})
+    if not sign:
+        await msg.edit_text(f"{email} confirm ho gaya MEGA par. Bot mein jodne ke liye /addaccount {email} password bhejo.")
+        return
+    password = ms.decrypt(sign["password_enc"])
+    try:
+        m = await ms.login_check(email, password)
+        st = await asyncio.to_thread(ms.storage, m)
+    except Exception as e:
+        await msg.edit_text(f"Account confirm ho gaya par login nahi hua: {e}\nThodi der baad /addaccount se jodo.")
+        return
+    await db.mega_signups.delete_one({"email": email})
+    acc = await store_account(email, password, m, st) if not await db.mega_accounts.find_one({"email": email}) else None
+    label = acc["label"] if acc else "Account"
+    await msg.edit_text(f"Naya MEGA account tayyar aur juda: {email} ({label})\nJagah: {gb(st['total'])}\nAb koi bhi MEGA link bhejo, main use is account mein save karke apna share link bhej dunga.")
 
 
 async def accounts_view():
@@ -289,8 +354,17 @@ async def save_link(update: Update, url: str):
             return
         extra = f"\n{li['folders']} folders, {li['files']} files" if is_folder else ""
         await msg.edit_text(f"Save ho raha hai: {li['name']} ({gb(li['size'])}){extra}...")
-        await ms.run(acc, ms.import_folder_link if is_folder else ms.import_link, url, acc.get("save_folder"))
-        await msg.edit_text(f"Save ho gaya: {'📁 ' if is_folder else ''}{li['name']}{extra}\nAccount: {acc['label']}\nFolder: {acc.get('save_folder_name') or 'Cloud Drive'}")
+        new_h = await ms.run(acc, ms.import_folder_link if is_folder else ms.import_link, url, acc.get("save_folder"))
+        share = ""
+        if new_h:
+            try:
+                share = "\n\nAapke account ka link:\n" + await ms.run(acc, ms.share_link, new_h)
+            except Exception as e:
+                share = f"\n\n(Share link nahi bana: {e})"
+        await msg.edit_text(
+            f"Save ho gaya: {'📁 ' if is_folder else ''}{li['name']}{extra}\nAccount: {acc['label']}\nFolder: {acc.get('save_folder_name') or 'Cloud Drive'}{share}",
+            disable_web_page_preview=True,
+        )
     except Exception as e:
         await msg.edit_text(f"Link save nahi hua. Link sahi hai? ({e})")
 
@@ -299,6 +373,10 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not await guard(update):
         return
     text = update.message.text.strip()
+    code = ms.confirm_code(text)
+    if code:
+        await finish_signup(update, code)
+        return
     links = ms.LINK_RE.findall(text)
     if links:
         for url in links:
@@ -413,7 +491,7 @@ async def start_bot(database):
         return
     try:
         application = Application.builder().token(token).build()
-        for name, fn in [("start", cmd_start), ("help", cmd_start), ("myid", cmd_myid), ("addaccount", cmd_addaccount),
+        for name, fn in [("start", cmd_start), ("help", cmd_start), ("myid", cmd_myid), ("addaccount", cmd_addaccount), ("newaccount", cmd_newaccount),
                          ("accounts", cmd_accounts), ("folders", cmd_folders), ("newfolder", cmd_newfolder),
                          ("auto", cmd_auto), ("status", cmd_status)]:
             application.add_handler(CommandHandler(name, fn))

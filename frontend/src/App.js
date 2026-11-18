@@ -6,12 +6,13 @@ import { Bot, HardDrive, RefreshCw, Shuffle, Terminal } from "lucide-react";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const COMMANDS = [
-  ["/addaccount email password", "Apna MEGA account jodo (password wala message bot khud delete karega)"],
+  ["/newaccount email password", "Aapke email se naya MEGA account, phir email ka confirm link bot ko bhejo"],
+  ["/addaccount email password", "Pehle se bana MEGA account jodo (password wala message bot khud delete karega)"],
   ["/accounts", "Saare accounts, khali jagah, switch ya hatao"],
   ["/folders", "Buttons se folder kholo, rename karo, save folder chuno"],
   ["/newfolder naam", "Selected folder mein naya folder"],
   ["/auto", "Link sabse zyada khali jagah wale account mein jaye"],
-  ["MEGA link bhejo", "File ya poora folder seedha aapke cloud mein save"],
+  ["MEGA link bhejo", "Cloud mein save, aur badle mein aapke account ka share link"],
 ];
 
 const gb = (n) => `${(n / 1073741824).toFixed(2)} GB`;
