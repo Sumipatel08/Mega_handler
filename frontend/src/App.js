@@ -13,6 +13,7 @@ const COMMANDS = [
   ["/newfolder naam", "Selected folder mein naya folder"],
   ["/auto", "Link sabse zyada khali jagah wale account mein jaye"],
   ["/search naam", "Saare accounts mein file ya folder dhoondo"],
+  ["/prefix text", "Har saved folder ke naam ke aage aapka prefix (off se hatao)"],
   ["/status", "Abhi ka account, save folder aur auto switch"],
   ["/wallpaper", "Random anime wallpaper"],
   ["MEGA link bhejo", "Cloud mein save, aur badle mein aapke account ka share link"],

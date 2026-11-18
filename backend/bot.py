@@ -55,6 +55,7 @@ HELP = (
     "➕ /newfolder `naam` ➥ naya folder\n"
     "🔁 /auto ➥ auto switch ON/OFF\n"
     "🔎 /search `naam` ➥ saare accounts mein dhoondo\n"
+    "🏷 /prefix `text` ➥ saved folders ke naam ke aage prefix (/prefix off)\n"
     "📊 /status ➥ abhi ka account\n"
     "🖼 /wallpaper ➥ anime wallpaper\n\n"
     "🔗 " + sb("MEGA link bhejo") + " ➥ cloud mein save + aapka share link + rename button"
@@ -374,6 +375,37 @@ async def cmd_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(text[:4000], reply_markup=K(rows))
 
 
+def with_prefix(prefix: str, name: str) -> str:
+    if name.startswith(prefix):
+        return name
+    return prefix + name if prefix[-1] in " -_|.]):" else f"{prefix} {name}"
+
+
+async def cmd_prefix(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not await guard(update):
+        return
+    text = " ".join(ctx.args).strip()
+    current = (await get_state()).get("prefix")
+    if not text:
+        await update.message.reply_text(
+            "🏷 " + sb("PREFIX") + f"\nAbhi: {current or 'koi nahi'}\n\n"
+            "Lagane ke liye: /prefix DD FREE DISH\nHatane ke liye: /prefix off\n"
+            "Phir har saved folder link ka naam apne aap 'prefix + purana naam' ho jayega." + CREDIT
+        )
+        return
+    if text.lower() == "off":
+        await set_state(prefix=None)
+        await update.message.reply_text("🏷 Prefix hata diya. Ab folders apne asli naam se save honge." + CREDIT)
+        return
+    if len(text) > 50:
+        await update.message.reply_text("Prefix 50 akshar se chhota rakho.")
+        return
+    await set_state(prefix=text)
+    await update.message.reply_text(
+        "🏷 " + sb("PREFIX SET") + f"\n{text}\n\nMisaal: abcd ➥ {with_prefix(text, 'abcd')}" + CREDIT
+    )
+
+
 async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not await guard(update):
         return
@@ -383,7 +415,7 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Koi account nahi juda.")
         return
     await update.message.reply_text(
-        f"Active: {acc['label']} ({acc['email']})\nSave folder: {acc.get('save_folder_name') or 'Cloud Drive'}\nAuto switch: {'ON' if s.get('auto_switch') else 'OFF'}"
+        f"Active: {acc['label']} ({acc['email']})\nSave folder: {acc.get('save_folder_name') or 'Cloud Drive'}\nAuto switch: {'ON' if s.get('auto_switch') else 'OFF'}\nPrefix: {s.get('prefix') or 'koi nahi'}"
     )
 
 
@@ -428,6 +460,15 @@ async def save_link(update: Update, url: str):
                 await msg.edit_text(f"MEGA ne mana kar diya: {acc['label']} ki storage full hai ({gb(free)} khali, chahiye {gb(li['size'])}). /auto ON karo ya dusra account jodo.")
                 return
             raise
+        prefix = (await get_state()).get("prefix")
+        if is_folder and new_h and prefix:
+            new_name = with_prefix(prefix, li["name"])
+            try:
+                await ms.run(acc, ms.rename, new_h, new_name)
+                extra += f"\n🏷 Naya naam: {new_name} (purana: {li['name']})"
+                li["name"] = new_name
+            except Exception as e:
+                extra += f"\n(Prefix nahi laga: {e})"
         share = ""
         if new_h:
             try:
@@ -587,7 +628,7 @@ async def start_bot(database):
         application = Application.builder().token(token).build()
         for name, fn in [("start", cmd_start), ("help", cmd_start), ("myid", cmd_myid), ("addaccount", cmd_addaccount), ("newaccount", cmd_newaccount),
                          ("accounts", cmd_accounts), ("folders", cmd_folders), ("newfolder", cmd_newfolder),
-                         ("auto", cmd_auto), ("search", cmd_search), ("wallpaper", cmd_wallpaper), ("status", cmd_status)]:
+                         ("auto", cmd_auto), ("prefix", cmd_prefix), ("search", cmd_search), ("wallpaper", cmd_wallpaper), ("status", cmd_status)]:
             application.add_handler(CommandHandler(name, fn))
         application.add_handler(CallbackQueryHandler(on_button))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
