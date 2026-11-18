@@ -63,10 +63,19 @@ export default function App() {
   const [status, setStatus] = useState(null);
   const [accounts, setAccounts] = useState([]);
 
+  const [busy, setBusy] = useState(false);
+
   const load = async () => {
-    const [s, a] = await Promise.all([axios.get(`${API}/bot/status`), axios.get(`${API}/accounts`)]);
-    setStatus(s.data);
-    setAccounts(a.data);
+    setBusy(true);
+    try {
+      const [s, a] = await Promise.all([axios.get(`${API}/bot/status`), axios.get(`${API}/accounts`)]);
+      setStatus(s.data);
+      setAccounts(a.data);
+    } catch (e) {
+      setStatus({ running: false, error: "Server se connect nahi ho paya. Refresh karo." });
+    } finally {
+      setBusy(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -97,7 +106,7 @@ export default function App() {
         <div className="panel rise" style={{ animationDelay: "220ms" }}>
           <div className="flex items-center justify-between">
             <p className="eyebrow"><HardDrive size={14} /> Jude hue accounts ({accounts.length})</p>
-            <button data-testid="refresh-accounts-button" onClick={load} className="iconbtn" aria-label="Refresh"><RefreshCw size={16} /></button>
+            <button data-testid="refresh-accounts-button" onClick={load} disabled={busy} className="iconbtn" aria-label="Refresh"><RefreshCw size={16} className={busy ? "animate-spin" : ""} /></button>
           </div>
           {accounts.length === 0 ? (
             <p data-testid="no-accounts-message" className="mt-6 text-sm text-[var(--muted)]">

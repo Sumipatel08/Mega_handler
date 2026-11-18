@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import uuid
@@ -106,7 +107,7 @@ async def cmd_addaccount(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = await chat.send_message("Login check ho raha hai...")
     try:
         m = await ms.login_check(email, password)
-        st = ms.storage(m)
+        st = await asyncio.to_thread(ms.storage, m)
     except Exception as e:
         await msg.edit_text(f"Login fail hua. Email/password check karo.\n({e})")
         return
@@ -159,13 +160,13 @@ async def folder_view(acc, handle=None):
         f"{len(f['folders'])} folders, {f['file_count']} files\n"
         f"Save folder: {em(acc.get('save_folder_name') or 'Cloud Drive')}{' (yahi)' if selected else ''}"
     )
-    rows = [[B(f"📁 {name}", callback_data=f"o:{h}")] for h, name in f["folders"][:40]]
+    rows = [[B(f"📁 {name}", callback_data=f"o:{acc['id']}:{h}")] for h, name in f["folders"][:40]]
     nav = []
     if not f["is_root"]:
-        nav.append(B("⬆️ Upar", callback_data=f"o:{f['parent']}"))
-        nav.append(B("✏️ Rename", callback_data=f"r:{f['handle']}"))
+        nav.append(B("⬆️ Upar", callback_data=f"o:{acc['id']}:{f['parent']}"))
+        nav.append(B("✏️ Rename", callback_data=f"r:{acc['id']}:{f['handle']}"))
     rows.append(nav) if nav else None
-    rows.append([B("✅ Yaha save karo", callback_data=f"s:{f['handle']}"), B("➕ Naya folder", callback_data=f"n:{f['handle']}")])
+    rows.append([B("✅ Yaha save karo", callback_data=f"s:{acc['id']}:{f['handle']}"), B("➕ Naya folder", callback_data=f"n:{acc['id']}:{f['handle']}")])
     rows.append([B("🔁 Account badlo", callback_data="accs")])
     return text, K(rows)
 
@@ -226,7 +227,7 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def pick_account_for(size: int):
+async def pick_account_for():
     s = await get_state()
     if not s.get("auto_switch"):
         return await active_account()
@@ -253,7 +254,10 @@ async def save_link(update: Update, url: str):
         return
     try:
         li = await ms.run(any_acc, ms.link_info, url)
-        acc = await pick_account_for(li["size"])
+        acc = await pick_account_for()
+        if not acc:
+            await msg.edit_text("Kisi bhi account se connect nahi ho paya. Thodi der baad try karo.")
+            return
         st = await refresh_storage(acc)
         if st["total"] - st["used"] < li["size"]:
             await msg.edit_text(f"{acc['label']} mein jagah kam hai ({gb(st['total'] - st['used'])} khali, file {gb(li['size'])}). /auto ON karo ya naya account jodo.")
@@ -315,10 +319,17 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
         if action == "rc":
             acc = await get_account(arg)
+            if not acc:
+                await q.edit_message_text("Ye account pehle hi hata diya gaya hai.")
+                return
             kb = K([[B("Haan, hatao", callback_data=f"rx:{arg}"), B("Nahi", callback_data="accs")]])
             await q.edit_message_text(f"{acc['label']} ({acc['email']}) bot se hata dein? MEGA par account aur files waise hi rahenge.", reply_markup=kb)
             return
-        acc = await active_account()
+        acc_id, _, arg = arg.partition(":")
+        acc = await get_account(acc_id)
+        if not acc:
+            await q.message.reply_text("Ye account ab juda nahi hai. /folders dobara kholo.")
+            return
         if action == "o":
             text, kb = await folder_view(acc, arg)
             await q.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
