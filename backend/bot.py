@@ -94,6 +94,15 @@ async def active_account():
     return acc or await db.mega_accounts.find_one({}, {"_id": 0}, sort=[("created_at", 1)])
 
 
+async def get_share_link(acc, handle):
+    q = {"acc": acc["id"], "h": handle}
+    doc = await db.share_keys.find_one(q)
+    link = await ms.run(acc, ms.share_link, handle, doc["key"] if doc else None)
+    if "/folder/" in link and not doc:
+        await db.share_keys.update_one(q, {"$set": {**q, "key": link.split("#", 1)[1]}}, upsert=True)
+    return link
+
+
 async def refresh_storage(acc):
     st = await ms.run(acc, ms.storage)
     await db.mega_accounts.update_one({"id": acc["id"]}, {"$set": {**st, "checked_at": datetime.now(timezone.utc).isoformat()}})
@@ -472,7 +481,7 @@ async def save_link(update: Update, url: str):
         share = ""
         if new_h:
             try:
-                share = "\n\nAapke account ka link:\n" + await ms.run(acc, ms.share_link, new_h)
+                share = "\n\nAapke account ka link:\n" + await get_share_link(acc, new_h)
             except Exception as e:
                 share = f"\n\n(Share link nahi bana: {e})"
         kb = None
@@ -581,7 +590,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         elif action == "i":
             await item_menu(q, acc, arg)
         elif action == "sh":
-            link = await ms.run(acc, ms.share_link, arg)
+            link = await get_share_link(acc, arg)
             await q.message.reply_text(f"Share link:\n{link}", disable_web_page_preview=True)
         elif action == "d":
             node = await ms.run(acc, ms.node_info, arg)

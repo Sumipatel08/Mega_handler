@@ -4,6 +4,8 @@ import json
 import os
 import re
 from cryptography.fernet import Fernet
+from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
 from mega import Mega
 from mega.crypto import a32_to_base64, a32_to_str, base64_to_a32, base64_url_decode, base64_url_encode, decrypt_attr, decrypt_key, encrypt_key, str_to_a32
 
@@ -22,8 +24,29 @@ def decrypt(token: str) -> str:
     return _fernet.decrypt(token.encode()).decode()
 
 
+def _mpi(n: int) -> bytes:
+    return n.bit_length().to_bytes(2, "big") + n.to_bytes((n.bit_length() + 7) // 8, "big")
+
+
+def ensure_keys(m):
+    if "pubk" in m._api_request({"a": "ug"}):
+        return False
+    key = RSA.generate(2048)
+    priv = _mpi(key.p) + _mpi(key.q) + _mpi(key.d) + _mpi(key.u)
+    priv += os.urandom(-len(priv) % 16)
+    m._api_request({
+        "a": "up",
+        "pubk": base64_url_encode(_mpi(key.n) + _mpi(key.e)),
+        "privk": a32_to_base64(encrypt_key(str_to_a32(priv), m.master_key)),
+    })
+    return True
+
+
 def _login(email: str, password: str):
-    return Mega().login(email, password)
+    m = Mega().login(email, password)
+    if ensure_keys(m):
+        m = Mega().login(email, password)
+    return m
 
 
 async def login_check(email: str, password: str):
@@ -242,11 +265,26 @@ def move_node(m, handle, dest):
     m.move(handle, dest)
 
 
-def share_link(m, handle):
-    link = m.export(node_id=handle)
-    hit = re.search(r"#(F?)!([\w-]+)!([\w-]+)", link)
-    kind = "folder" if hit.group(1) else "file"
-    return f"https://mega.nz/{kind}/{hit.group(2)}#{hit.group(3)}"
+def share_link(m, handle, known_key=None):
+    node = m.get_files()[handle]
+    if node["t"] == 0:
+        ph = m._api_request({"a": "l", "n": handle})
+        return f"https://mega.nz/file/{ph}#{a32_to_base64(node['key'])}"
+    if known_key:
+        share_key = base64_url_decode(known_key)
+    elif node.get("shared_folder_key"):
+        share_key = a32_to_str(node["shared_folder_key"])
+    else:
+        share_key = os.urandom(16)
+        mk = AES.new(a32_to_str(m.master_key), AES.MODE_ECB)
+        enc_node_key = base64_url_encode(AES.new(share_key, AES.MODE_ECB).encrypt(a32_to_str(node["k"])))
+        m._api_request([{
+            "a": "s2", "n": handle, "s": [{"u": "EXP", "r": 0}], "i": m.request_id,
+            "ok": base64_url_encode(mk.encrypt(share_key)), "ha": base64_url_encode(mk.encrypt(handle.encode() * 2)),
+            "cr": [[handle], [handle], [0, 0, enc_node_key]],
+        }])
+    ph = m._api_request({"a": "l", "n": handle})
+    return f"https://mega.nz/folder/{ph}#{base64_url_encode(share_key)}"
 
 
 def mkdir(m, name, parent=None):
