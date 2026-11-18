@@ -29,5 +29,7 @@
 
 - /prefix <text> (off to clear): saved folder links auto-renamed to prefix + original name before share link
 
+- Share EACCESS fix: auto-create RSA keypair for accounts missing keys (signup accounts) on login; own share_link (file 'l', folder s2+l) with folder share keys stored in Mongo share_keys so links stay stable
+
 ## Backlog
 - P2: storage alerts, webhook mode for multi-instance deploy

@@ -1,0 +1,26 @@
+{
+  "summary": "Backend-only test of the EACCESS share-link fix, with MEGA fully mocked and throwaway TEST_ DBs. I updated the 2 old tests to match the new implementation: test_share_link_conversion now checks 'l' plus the node key for files and s2 plus 'l' for folders, and test_share_link_in_reply now expects the args ('NEWH', None). I added tests/test_share_keys.py with 14 tests. (1) ensure_keys returns False and sends only 'ug' when pubk exists. Otherwise it sends 'up' with exactly pubk and privk. pubk parses to a 2048-bit n and e=65537. privk decrypts with the master key, is 16-byte aligned, and gives p*q==n with a valid d. A full mega.py _login_process csid path, using the uploaded privk and an RSA-encrypted sid, recovers the exact sid and master key. (2) _login logs in again when keys were created and does not when they already existed. (3) share_link for a file sends only {'a':'l'} and returns /file/<ph>#<node key>. For a new folder it sends s2 with EXP r=0 and the request id. In that s2, ok decrypts with the master key to the share key, ha equals the handle twice, and cr holds the node key encrypted with the share key. It then sends 'l' and returns /folder/<ph>#<sharekey>. known_key and shared_folder_key are reused in the link. (4) bot.get_share_link stores {acc,h,key} on the first folder share and passes the stored key on later shares, so the link stays the same. File links are not stored. Keys are kept separate per account. Both the 'sh' button and the save_link reply use it. 94 passed, 1 xfailed (the known_key spec difference below). ruff F is clean. The real test_database is unchanged: 1 account, and share_keys is empty. No TEST_ DBs are left.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "mega_service.share_link(known_key=...)", "issue": "Differs from the review spec. When known_key is given, s2 is skipped and only 'l' is sent; the spec says s2 is sent with ok encrypted from the known key. This works while the share still exists on MEGA. If the user removed the share or link in MEGA web, 'l' may make a link that cannot be decrypted, or fail. Re-sending s2 with the known key would make it idempotent. Recorded as xfail in test_folder_known_key."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_share_keys.py", "/app/backend/tests/test_folder_links_file_actions.py", "/app/backend/tests/test_signup_share.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: in share_link, send s2 (with ok/ha/cr built from the known key) when known_key is given, as the spec describes. Then remove the xfail branch in test_folder_known_key."
+  ],
+  "critical_code_review_comments": [
+    "A folder shared before this fix (for example via MEGA web) has no share_keys doc, and mega.py no longer gives shared_folder_key. The bot then makes a new random key and sends s2 again on an already-shared folder. MEGA may reject this, or the old public link may change or break.",
+    "privk 'u' is pycryptodome key.u (p^-1 mod q). mega.py ignores u, and the live check passed, but MEGA web clients may expect u = q^-1 mod p. Worth checking if the account is used in official clients for contact sharing.",
+    "The 'ha' value uses handle.encode()*2, which is only 16 bytes because MEGA handles are 8 chars. That is fine for real handles.",
+    "get_share_link stores the key only when no doc exists, so a stale key is never refreshed. That is fine given the current design."
+  ],
+  "updated_files": ["/app/backend/tests/test_share_keys.py", "/app/backend/tests/test_folder_links_file_actions.py", "/app/backend/tests/test_signup_share.py"],
+  "success_rate": {"backend": "100% of implemented behaviour (94 passed, 1 xfail = spec difference)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "None; throwaway TEST_bot_handlers_<uuid> DBs auto-dropped.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/. The fake fixture comes from conftest.py; do not import it in test files (ruff F811). Folder handles in share_link tests must be 8 chars because the ha AES block needs 16 bytes. Real DB has 1 account and an empty share_keys collection; do not touch it."
+}

@@ -276,13 +276,13 @@ def share_link(m, handle, known_key=None):
         share_key = a32_to_str(node["shared_folder_key"])
     else:
         share_key = os.urandom(16)
-        mk = AES.new(a32_to_str(m.master_key), AES.MODE_ECB)
-        enc_node_key = base64_url_encode(AES.new(share_key, AES.MODE_ECB).encrypt(a32_to_str(node["k"])))
-        m._api_request([{
-            "a": "s2", "n": handle, "s": [{"u": "EXP", "r": 0}], "i": m.request_id,
-            "ok": base64_url_encode(mk.encrypt(share_key)), "ha": base64_url_encode(mk.encrypt(handle.encode() * 2)),
-            "cr": [[handle], [handle], [0, 0, enc_node_key]],
-        }])
+    mk = AES.new(a32_to_str(m.master_key), AES.MODE_ECB)
+    enc_node_key = base64_url_encode(AES.new(share_key, AES.MODE_ECB).encrypt(a32_to_str(node["k"])))
+    m._api_request([{
+        "a": "s2", "n": handle, "s": [{"u": "EXP", "r": 0}], "i": m.request_id,
+        "ok": base64_url_encode(mk.encrypt(share_key)), "ha": base64_url_encode(mk.encrypt(handle.encode() * 2)),
+        "cr": [[handle], [handle], [0, 0, enc_node_key]],
+    }])
     ph = m._api_request({"a": "l", "n": handle})
     return f"https://mega.nz/folder/{ph}#{base64_url_encode(share_key)}"
 

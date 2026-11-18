@@ -139,12 +139,20 @@ class TestNodeOps:
         m.move.assert_called_with("C", "R")
 
     def test_share_link_conversion(self):
+        # new implementation: files -> 'l' + node key; folders -> s2 (EXP) + 'l' with share key
         m = MagicMock()
-        m.export.return_value = "https://mega.co.nz/#!fileH!fileK-_1"
-        assert ms.share_link(m, "h") == "https://mega.nz/file/fileH#fileK-_1"
-        m.export.assert_called_with(node_id="h")
-        m.export.return_value = "https://mega.co.nz/#F!folH!folK"
-        assert ms.share_link(m, "h") == "https://mega.nz/folder/folH#folK"
+        m.master_key = rnd(4)
+        m.request_id = "rid"
+        fkey = rnd(8)
+        m.get_files.return_value = {"h": {"t": 0, "key": fkey}, "FoLdEr01": {"t": 1, "k": rnd(4)}}
+        m._api_request.return_value = "PH1"
+        assert ms.share_link(m, "h") == f"https://mega.nz/file/PH1#{a32_to_base64(fkey)}"
+        m._api_request.assert_called_once_with({"a": "l", "n": "h"})
+        m._api_request.reset_mock()
+        link = ms.share_link(m, "FoLdEr01")
+        assert link.startswith("https://mega.nz/folder/PH1#")
+        assert len(base64_url_decode(link.split("#")[1])) == 16
+        assert m._api_request.call_args_list[-1][0][0] == {"a": "l", "n": "FoLdEr01"}
 
     def test_delete_moves_to_rubbish(self):
         m = MagicMock()

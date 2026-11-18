@@ -224,7 +224,7 @@ class TestShareAfterSave:
             a1, _ = await add(db, "test_sh1@example.com")
             up, cx, sent = msg_update(text="https://mega.nz/file/abc#def")
             await bot.on_text(up, cx)
-            assert (a1["id"], "share_link", ("NEWH",)) in fake.calls
+            assert (a1["id"], "share_link", ("NEWH", None)) in fake.calls
             txt = sent.edit_text.call_args[0][0]
             assert bot.sb("SAVE HO GAYA") in txt and "Aapke account ka link" in txt and "https://mega.nz/file/F1#KEY" in txt
         run_with_db(t)
