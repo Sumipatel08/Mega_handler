@@ -1,0 +1,19 @@
+{
+  "summary": "Backend-only test of iteration 6 with MEGA and Telegram mocked, using throwaway TEST_ DBs. Changed the old test_insufficient_space test (it expected the 'jagah kam' block) to test_insufficient_space_warns_but_imports. Added tests/test_bigsave_search.py with 15 tests. (1) 25GB folder link on a 20GB/0-used account: import_folder_link is still called; the progress and success replies show '⚠️ Size 25.00 GB hai, khali sirf 20.00 GB'; the success reply has the size, CREDIT and the r/o keyboard; no warning when space is enough. (2) A 'MEGA error -17' ValueError and the real mega.errors.RequestError(-17) ('EOVERQUOTA, Request over quota') both give 'MEGA ne mana kar diya ... storage full ... /auto'; other errors give 'Link save nahi hua (...)'. (3) The real ms.search on a fake session: case-insensitive; Rubbish Bin and Inbox nodes are excluded; nodes with no attrs are skipped; paths are correct (Cloud Drive/Movies/...); folders come before files. (4) /search: usage message for 0 or 1 characters; message when there are no accounts; non-owner is refused and search is not called; all 3 accounts are searched in order; account labels, paths, '2 RESULTS' and CREDIT appear; o:/i: buttons are under 64 bytes; the failed account appears in the warning; no-results message; 45 hits gives 30 buttons and 'aur 15 results'; o:/i: callbacks work on a non-active account without switching the active one; /search is in HELP and registered. 67/67 pass with xdist and with -n 0. ruff F clean. The real DB is unchanged (only dac6ff85) and no TEST_ DBs are left.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_bigsave_search.py", "/app/backend/tests/test_bot_handlers.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ms.run retries any exception once after logging in again, and that includes import_folder_link/import_link. On a -17 quota error the import is sent to MEGA twice, which is wasteful but harmless. If a big folder import times out after MEGA has accepted it, the retry can duplicate the folder. Consider not retrying imports, or retrying only on ESID/-15.",
+    "When the copy goes over quota, MEGA may accept the import and then put the account into over-quota (read-only/paywall) state. Users should know this; the warning text says 'MEGA app jaisa', which is fine.",
+    "The /search reply is cut with text[:4000]. With 30 long paths this can cut off the CREDIT or failed-account note. Minor.",
+    "/search runs through accounts one after another (each ms.run holds that account's lock and calls get_files). With many accounts it is slow. asyncio.gather would work because the locks are per account."
+  ],
+  "updated_files": ["/app/backend/tests/test_bot_handlers.py", "/app/backend/tests/test_bigsave_search.py"],
+  "success_rate": {"backend": "100% (67/67)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "None; throwaway TEST_bot_handlers_<uuid> DBs auto-dropped.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/. patch_run helper in test_bigsave_search.py overrides named ms functions (values or async callables) on top of FakeMega. Never start a second polling instance. Real DB has account dac6ff85 - do not touch."
+}

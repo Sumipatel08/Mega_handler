@@ -327,14 +327,17 @@ class TestLinks:
             assert (a1["id"], "import_folder_link", (url, None)) in fake.calls
         run_with_db(t)
 
-    def test_insufficient_space(self, fake):
+    def test_insufficient_space_warns_but_imports(self, fake):
+        # New behaviour (iter 6): low free space no longer blocks, only warns
         async def t(db):
             a1, _ = await add(db, "test_l3@example.com")
             fake.storage[a1["id"]] = (int(19.5 * GB), 20 * GB)
             up, cx, sent = msg_update(text="https://mega.nz/file/x#y")
             await bot.on_text(up, cx)
-            assert "jagah kam" in sent.edit_text.call_args[0][0]
-            assert not any(c[1] == "import_link" for c in fake.calls)
+            final = sent.edit_text.call_args[0][0]
+            assert "jagah kam" not in final
+            assert "⚠️ Size 1.00 GB" in final and "khali sirf 0.50 GB" in final
+            assert any(c[1] == "import_link" for c in fake.calls)
         run_with_db(t)
 
     def test_auto_switch_picks_most_free(self, fake):

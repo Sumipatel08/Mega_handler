@@ -24,5 +24,8 @@
 
 - Save reply has Rename + Open/Options buttons for the copied item; stylish unicode-bold text, anime wallpapers (/start, /wallpaper), credit 'Made by DD FREE DISH' in bot + dashboard
 
+- Big copies (> free space, e.g. >20GB) no longer blocked: warn + attempt like MEGA app; clear msg on MEGA over-quota (-17)
+- /search across all accounts with open/options buttons
+
 ## Backlog
-- P2: search, storage alerts, webhook mode for multi-instance deploy
+- P2: storage alerts, webhook mode for multi-instance deploy
